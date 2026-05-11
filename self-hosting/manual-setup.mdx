@@ -1,0 +1,140 @@
+---
+title: "Manual setup: Python backend and Next.js frontend"
+description: "Step-by-step guide to running DeepWiki Open locally by starting the FastAPI backend and Next.js frontend as two separate processes on your machine."
+---
+
+Manual setup runs DeepWiki Open as two separate processes on your machine: a FastAPI backend (Python 3.11+) that handles AI inference and repository analysis, and a Next.js frontend that serves the browser UI. This approach gives you full control over each layer and is the recommended path for local development.
+
+<Note>
+  You need at least one API key to generate wikis. Provide `GOOGLE_API_KEY` for Google Gemini models or `OPENAI_API_KEY` for OpenAI models. If you want a fully offline setup with no API keys at all, use [Ollama](/self-hosting/ollama) instead.
+</Note>
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Python | 3.11+ | The `.python-version` file in the repo pins `3.12` |
+| Poetry | 2.0.1 | Installed via pip in the setup steps below |
+| Node.js | 20+ | Required for the Next.js frontend |
+| npm or Yarn | — | Comes with Node.js; Yarn is optional |
+
+## Setup steps
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/AsyncFuncAI/deepwiki-open.git
+    cd deepwiki-open
+    ```
+  </Step>
+
+  <Step title="Create a .env file">
+    Create a `.env` file in the project root. Only one cloud provider key is strictly required to generate wikis, but you can add as many as you want.
+
+    ```env
+    # --- Required: at least one of these ---
+    GOOGLE_API_KEY=your_google_api_key
+    OPENAI_API_KEY=your_openai_api_key
+
+    # --- Optional: additional providers ---
+    OPENROUTER_API_KEY=your_openrouter_api_key
+
+    # Azure OpenAI
+    AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+    AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint
+    AZURE_OPENAI_VERSION=your_azure_openai_version
+
+    # Ollama (only if Ollama is on a remote host; defaults to http://localhost:11434)
+    OLLAMA_HOST=your_ollama_host
+
+    # --- Optional: embeddings provider ---
+    # Options: openai (default), google, ollama
+    DEEPWIKI_EMBEDDER_TYPE=google
+
+    # --- Optional: server config ---
+    PORT=8001
+    SERVER_BASE_URL=http://localhost:8001
+    ```
+
+    - Get a Google API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+    - Get an OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+  </Step>
+
+  <Step title="Install Python dependencies">
+    ```bash
+    python -m pip install poetry==2.0.1 && poetry install -C api
+    ```
+
+    This installs Poetry and then uses it to install all backend dependencies declared in `api/pyproject.toml` into an isolated virtual environment inside `api/`.
+  </Step>
+
+  <Step title="Start the backend API server">
+    ```bash
+    python -m api.main
+    ```
+
+    The FastAPI server starts on **port 8001** by default. You will see log output confirming it is ready to accept requests. Leave this terminal open.
+  </Step>
+
+  <Step title="Install frontend dependencies">
+    Open a second terminal window in the project root, then install the JavaScript packages:
+
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Start the Next.js frontend">
+    <CodeGroup>
+      ```bash npm
+      npm run dev
+      ```
+
+      ```bash yarn
+      yarn dev
+      ```
+    </CodeGroup>
+
+    The frontend starts on **port 3000** in development mode with hot-reloading enabled.
+  </Step>
+
+  <Step title="Open DeepWiki in your browser">
+    Navigate to [http://localhost:3000](http://localhost:3000). Enter any GitHub, GitLab, or Bitbucket repository URL and click **Generate Wiki**.
+
+    For private repositories, click **+ Add access tokens** and provide your personal access token before generating.
+  </Step>
+</Steps>
+
+## Default ports
+
+| Service | Port | Environment variable |
+|---------|------|---------------------|
+| FastAPI backend | `8001` | `PORT` |
+| Next.js frontend | `3000` | — |
+
+If you change `PORT`, also update `SERVER_BASE_URL` so the frontend knows where to find the API:
+
+```env
+PORT=9000
+SERVER_BASE_URL=http://localhost:9000
+```
+
+## Choosing an embedder
+
+The embedder controls how repository code is indexed for retrieval. Set `DEEPWIKI_EMBEDDER_TYPE` in your `.env` file:
+
+| Value | Embedding model used | API key required |
+|-------|---------------------|-----------------|
+| `openai` (default) | `text-embedding-3-small` | `OPENAI_API_KEY` |
+| `google` | `gemini-embedding-001` | `GOOGLE_API_KEY` |
+| `ollama` | `nomic-embed-text` (local) | None |
+
+<Note>
+  When you switch embedders, previously generated embeddings from other providers are incompatible. You will need to re-index any repositories you had already processed.
+</Note>

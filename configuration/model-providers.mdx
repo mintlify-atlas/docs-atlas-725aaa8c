@@ -1,0 +1,233 @@
+---
+title: "AI model providers and model selection"
+description: "Configure Google Gemini, OpenAI, OpenRouter, Azure OpenAI, AWS Bedrock, Ollama, and DashScope as LLM providers in DeepWiki Open, including custom model selection."
+---
+
+DeepWiki Open uses a provider-based model selection system defined in `api/config/generator.json`. Each provider exposes a list of predefined models and a default, and every provider sets `supportsCustomModel: true`, which means you can also type any model identifier directly in the UI without being limited to the predefined list. The default provider at startup is `google`.
+
+## How provider and model selection works
+
+When you open DeepWiki, the frontend fetches the provider list from the `/models/config` API endpoint. This list is built directly from `generator.json` at runtime, so adding or removing models from that file is reflected immediately on the next server start. In the UI you choose a provider from a dropdown, then choose (or type) a model. Your selection is sent with every generation request.
+
+To change which provider is active by default, edit the `default_provider` field in `generator.json`, or point `DEEPWIKI_CONFIG_DIR` at a directory with your own copy of the file.
+
+## Provider setup
+
+<Tabs>
+  <Tab title="Google">
+    **Required environment variable**
+
+    ```bash
+    GOOGLE_API_KEY=your_google_api_key
+    ```
+
+    Google Gemini is the default provider. The API key is also reused by the Google AI embedder when `DEEPWIKI_EMBEDDER_TYPE=google`.
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `gemini-2.5-flash` | Yes |
+    | `gemini-2.5-flash-lite` | |
+    | `gemini-2.5-pro` | |
+
+    Custom model identifiers are supported — enter any Gemini model ID available in your project.
+  </Tab>
+
+  <Tab title="OpenAI">
+    **Required environment variable**
+
+    ```bash
+    OPENAI_API_KEY=your_openai_api_key
+    ```
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `gpt-5-nano` | Yes |
+    | `gpt-5` | |
+    | `gpt-5-mini` | |
+    | `gpt-4o` | |
+    | `gpt-4.1` | |
+    | `o1` | |
+    | `o3` | |
+    | `o4-mini` | |
+
+    Custom model identifiers are supported — enter any OpenAI model ID your account has access to.
+
+    **Enterprise and private channel support**
+
+    The `OPENAI_BASE_URL` variable redirects all OpenAI API calls to a different endpoint. This is intended for organizations with private API channels, self-hosted deployments, or any OpenAI API-compatible service:
+
+    ```bash
+    OPENAI_BASE_URL=https://your-private-endpoint.com/v1
+    ```
+
+    When set, the same base URL is also used by the OpenAI embedder client.
+  </Tab>
+
+  <Tab title="OpenRouter">
+    **Required environment variable**
+
+    ```bash
+    OPENROUTER_API_KEY=your_openrouter_api_key
+    ```
+
+    OpenRouter proxies requests to dozens of upstream providers under a single API key, making it useful for comparing models or accessing providers not available in your region.
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `openai/gpt-5-nano` | Yes |
+    | `openai/gpt-4o` | |
+    | `openai/gpt-4.1` | |
+    | `openai/o1` | |
+    | `openai/o3` | |
+    | `openai/o4-mini` | |
+    | `deepseek/deepseek-r1` | |
+    | `anthropic/claude-3.7-sonnet` | |
+    | `anthropic/claude-3.5-sonnet` | |
+
+    Custom model identifiers are supported — use any model slug listed in the [OpenRouter model catalog](https://openrouter.ai/models).
+  </Tab>
+
+  <Tab title="Azure OpenAI">
+    **Required environment variables**
+
+    ```bash
+    AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+    AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+    AZURE_OPENAI_VERSION=2024-02-01
+    ```
+
+    All three variables must be set together. The endpoint and version are passed directly to the Azure OpenAI SDK.
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `gpt-4o` | Yes |
+    | `gpt-4` | |
+    | `gpt-35-turbo` | |
+    | `gpt-4-turbo` | |
+
+    <Note>
+      The model identifier you enter must match the **deployment name** you created in your Azure OpenAI resource, not necessarily the underlying model name.
+    </Note>
+
+    Custom model identifiers are supported — enter the name of any deployment in your resource.
+  </Tab>
+
+  <Tab title="AWS Bedrock">
+    **Required environment variables**
+
+    Use static credentials:
+
+    ```bash
+    AWS_ACCESS_KEY_ID=your_access_key_id
+    AWS_SECRET_ACCESS_KEY=your_secret_access_key
+    AWS_REGION=us-east-1
+    ```
+
+    Or assume a role (the Bedrock client calls STS `AssumeRole` automatically when `AWS_ROLE_ARN` is set):
+
+    ```bash
+    AWS_ROLE_ARN=arn:aws:iam::123456789012:role/DeepWikiRole
+    AWS_REGION=us-east-1
+    ```
+
+    For temporary credentials, also set `AWS_SESSION_TOKEN`.
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `anthropic.claude-3-sonnet-20240229-v1:0` | Yes |
+    | `anthropic.claude-3-haiku-20240307-v1:0` | |
+    | `anthropic.claude-3-opus-20240229-v1:0` | |
+    | `amazon.titan-text-express-v1` | |
+    | `cohere.command-r-v1:0` | |
+    | `ai21.j2-ultra-v1` | |
+
+    Custom model identifiers are supported — enter any Bedrock model ID enabled in your AWS account.
+  </Tab>
+
+  <Tab title="Ollama">
+    **Required environment variable**
+
+    No API key is required. If Ollama runs on a remote host or a non-default port, set:
+
+    ```bash
+    OLLAMA_HOST=http://your-ollama-host:11434
+    ```
+
+    If Ollama is running locally on port 11434 (the default), no environment variable is needed.
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `qwen3:1.7b` | Yes |
+    | `llama3:8b` | |
+    | `qwen3:8b` | |
+
+    Custom model identifiers are supported — enter the name of any model you have pulled locally (e.g. `mistral:7b`, `phi3:mini`).
+
+    <Tip>
+      Pull a model before starting DeepWiki: `ollama pull qwen3:1.7b`
+    </Tip>
+  </Tab>
+
+  <Tab title="DashScope">
+    **Required environment variable**
+
+    DashScope is Alibaba Cloud's model API. Configure your API key through the standard mechanism used by the DashScope SDK (typically `DASHSCOPE_API_KEY`).
+
+    **Available models**
+
+    | Model | Default |
+    |-------|---------|
+    | `qwen-plus` | Yes |
+    | `qwen-turbo` | |
+    | `deepseek-r1` | |
+
+    Custom model identifiers are supported — enter any model ID available in your DashScope account.
+  </Tab>
+</Tabs>
+
+## Custom model selection for service providers
+
+Every provider in `generator.json` has `"supportsCustomModel": true`. This means the DeepWiki UI renders a free-text input alongside the model dropdown, allowing you to enter any model identifier that the provider's API accepts. This is particularly useful when:
+
+- You want to use a newly released model before it is added to the predefined list.
+- You operate a fine-tuned or private model deployment.
+- You are building a multi-tenant service and need to expose different models to different users.
+
+No code changes or server restarts are needed — the custom model ID is forwarded directly to the provider client at generation time.
+
+## Customizing generator.json
+
+To add a model or change defaults permanently, edit `api/config/generator.json` (or create a copy in a directory pointed to by `DEEPWIKI_CONFIG_DIR`):
+
+```json
+{
+  "default_provider": "google",
+  "providers": {
+    "google": {
+      "default_model": "gemini-2.5-flash",
+      "supportsCustomModel": true,
+      "models": {
+        "gemini-2.5-flash": {
+          "temperature": 1.0,
+          "top_p": 0.8,
+          "top_k": 20
+        }
+      }
+    }
+  }
+}
+```
+
+Restart the API server after editing the file. The `/models/config` endpoint will reflect your changes immediately on the next start.

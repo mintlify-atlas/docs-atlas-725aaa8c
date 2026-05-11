@@ -1,0 +1,467 @@
+---
+title: "DeepWiki configuration files reference"
+description: "Reference for generator.json, embedder.json, and repo.json — the config files that control DeepWiki's AI models, embeddings, and repository handling."
+---
+
+DeepWiki Open uses three JSON configuration files to control AI model selection, embedding behaviour, and repository file handling. By default these files live in `api/config/` inside the project root. You can move them anywhere and point DeepWiki at the new location by setting the `DEEPWIKI_CONFIG_DIR` environment variable — no code changes required.
+
+```bash
+# Use a custom config directory
+export DEEPWIKI_CONFIG_DIR=/etc/deepwiki/config
+```
+
+All three files are read at server startup. Changes take effect after restarting the API server.
+
+---
+
+## generator.json
+
+`generator.json` defines every LLM provider DeepWiki can use for text generation. It controls which providers are available in the UI, which models each provider exposes, and the sampling parameters applied to each model.
+
+### Top-level fields
+
+| Field | Type | Description |
+|---|---|---|
+| `default_provider` | string | The provider selected by default in the UI (e.g. `"google"`). |
+| `providers` | object | Map of provider ID to provider configuration. |
+
+### Provider configuration fields
+
+| Field | Type | Description |
+|---|---|---|
+| `default_model` | string | Model pre-selected when this provider is chosen. |
+| `supportsCustomModel` | boolean | When `true`, users can type a model ID not listed under `models`. |
+| `models` | object | Map of model ID to sampling parameter object. |
+| `client_class` | string | Internal client class name (required only for `bedrock` and `azure`). |
+
+### Model sampling parameters
+
+Most providers use top-level `temperature`, `top_p`, and optionally `top_k`. Ollama models nest these under an `options` key along with `num_ctx`.
+
+| Field | Type | Description |
+|---|---|---|
+| `temperature` | number | Sampling temperature. Higher values increase randomness. |
+| `top_p` | number | Nucleus sampling threshold. |
+| `top_k` | number | Top-k sampling limit (used by Google models). |
+| `options.num_ctx` | integer | Context window size in tokens (Ollama only). |
+
+### Full file
+
+<CodeGroup>
+
+```json generator.json
+{
+  "default_provider": "google",
+  "providers": {
+    "dashscope": {
+      "default_model": "qwen-plus",
+      "supportsCustomModel": true,
+      "models": {
+        "qwen-plus": { "temperature": 0.7, "top_p": 0.8 },
+        "qwen-turbo": { "temperature": 0.7, "top_p": 0.8 },
+        "deepseek-r1": { "temperature": 0.7, "top_p": 0.8 }
+      }
+    },
+    "google": {
+      "default_model": "gemini-2.5-flash",
+      "supportsCustomModel": true,
+      "models": {
+        "gemini-2.5-flash":      { "temperature": 1.0, "top_p": 0.8, "top_k": 20 },
+        "gemini-2.5-flash-lite": { "temperature": 1.0, "top_p": 0.8, "top_k": 20 },
+        "gemini-2.5-pro":        { "temperature": 1.0, "top_p": 0.8, "top_k": 20 }
+      }
+    },
+    "openai": {
+      "default_model": "gpt-5-nano",
+      "supportsCustomModel": true,
+      "models": {
+        "gpt-5":      { "temperature": 1.0 },
+        "gpt-5-nano": { "temperature": 1.0 },
+        "gpt-5-mini": { "temperature": 1.0 },
+        "gpt-4o":     { "temperature": 0.7, "top_p": 0.8 },
+        "gpt-4.1":    { "temperature": 0.7, "top_p": 0.8 },
+        "o1":         { "temperature": 0.7, "top_p": 0.8 },
+        "o3":         { "temperature": 1.0 },
+        "o4-mini":    { "temperature": 1.0 }
+      }
+    },
+    "openrouter": {
+      "default_model": "openai/gpt-5-nano",
+      "supportsCustomModel": true,
+      "models": {
+        "openai/gpt-5-nano":            { "temperature": 0.7, "top_p": 0.8 },
+        "openai/gpt-4o":                { "temperature": 0.7, "top_p": 0.8 },
+        "deepseek/deepseek-r1":         { "temperature": 0.7, "top_p": 0.8 },
+        "openai/gpt-4.1":               { "temperature": 0.7, "top_p": 0.8 },
+        "openai/o1":                    { "temperature": 0.7, "top_p": 0.8 },
+        "openai/o3":                    { "temperature": 1.0 },
+        "openai/o4-mini":               { "temperature": 1.0 },
+        "anthropic/claude-3.7-sonnet":  { "temperature": 0.7, "top_p": 0.8 },
+        "anthropic/claude-3.5-sonnet":  { "temperature": 0.7, "top_p": 0.8 }
+      }
+    },
+    "ollama": {
+      "default_model": "qwen3:1.7b",
+      "supportsCustomModel": true,
+      "models": {
+        "qwen3:1.7b": { "options": { "temperature": 0.7, "top_p": 0.8, "num_ctx": 32000 } },
+        "llama3:8b":  { "options": { "temperature": 0.7, "top_p": 0.8, "num_ctx": 8000  } },
+        "qwen3:8b":   { "options": { "temperature": 0.7, "top_p": 0.8, "num_ctx": 32000 } }
+      }
+    },
+    "bedrock": {
+      "client_class": "BedrockClient",
+      "default_model": "anthropic.claude-3-sonnet-20240229-v1:0",
+      "supportsCustomModel": true,
+      "models": {
+        "anthropic.claude-3-sonnet-20240229-v1:0": { "temperature": 0.7, "top_p": 0.8 },
+        "anthropic.claude-3-haiku-20240307-v1:0":  { "temperature": 0.7, "top_p": 0.8 },
+        "anthropic.claude-3-opus-20240229-v1:0":   { "temperature": 0.7, "top_p": 0.8 },
+        "amazon.titan-text-express-v1":             { "temperature": 0.7, "top_p": 0.8 },
+        "cohere.command-r-v1:0":                    { "temperature": 0.7, "top_p": 0.8 },
+        "ai21.j2-ultra-v1":                         { "temperature": 0.7, "top_p": 0.8 }
+      }
+    },
+    "azure": {
+      "client_class": "AzureAIClient",
+      "default_model": "gpt-4o",
+      "supportsCustomModel": true,
+      "models": {
+        "gpt-4o":        { "temperature": 0.7, "top_p": 0.8 },
+        "gpt-4":         { "temperature": 0.7, "top_p": 0.8 },
+        "gpt-35-turbo":  { "temperature": 0.7, "top_p": 0.8 },
+        "gpt-4-turbo":   { "temperature": 0.7, "top_p": 0.8 }
+      }
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+### Adding a new model
+
+To add a model without changing code, add an entry under the appropriate provider's `models` map and restart the API server:
+
+```json
+"openai": {
+  "default_model": "gpt-5-nano",
+  "supportsCustomModel": true,
+  "models": {
+    "gpt-5-nano": { "temperature": 1.0 },
+    "my-fine-tuned-model": { "temperature": 0.5, "top_p": 0.9 }
+  }
+}
+```
+
+### Adding a new provider
+
+Add a new key under `providers` with at least `default_model`, `supportsCustomModel`, and `models`. If the provider requires a custom client class (as `bedrock` and `azure` do), also set `client_class` to the appropriate internal class name.
+
+---
+
+## embedder.json
+
+`embedder.json` configures the embedding model used to convert repository code into vectors for retrieval, the retriever's top-k setting, and the text splitter that chunks source files before embedding.
+
+### Top-level sections
+
+| Section | Description |
+|---|---|
+| `embedder` | OpenAI-compatible embedding client (default, uses `text-embedding-3-small`). |
+| `embedder_ollama` | Local Ollama embedding client. |
+| `embedder_google` | Google AI embedding client (uses `gemini-embedding-001`). |
+| `embedder_bedrock` | Amazon Bedrock embedding client. |
+| `retriever` | Controls how many chunks are retrieved per query (`top_k`). |
+| `text_splitter` | Controls how source files are chunked before embedding. |
+
+### Embedder fields
+
+| Field | Type | Description |
+|---|---|---|
+| `client_class` | string | Internal client class: `"OpenAIClient"`, `"OllamaClient"`, `"GoogleEmbedderClient"`, or `"BedrockClient"`. |
+| `batch_size` | integer | Number of texts submitted per embedding API call. |
+| `model_kwargs.model` | string | Embedding model identifier. |
+| `model_kwargs.dimensions` | integer | Output vector dimensionality (OpenAI and Bedrock). |
+| `model_kwargs.encoding_format` | string | Vector encoding format (OpenAI): `"float"`. |
+| `model_kwargs.task_type` | string | Embedding task hint (Google): `"SEMANTIC_SIMILARITY"`. |
+
+### Retriever fields
+
+| Field | Type | Description |
+|---|---|---|
+| `top_k` | integer | Number of most relevant chunks to retrieve per query. Default is `20`. |
+
+### Text splitter fields
+
+| Field | Type | Description |
+|---|---|---|
+| `split_by` | string | Unit of splitting: `"word"`. |
+| `chunk_size` | integer | Maximum number of words per chunk. Default is `350`. |
+| `chunk_overlap` | integer | Number of words that overlap between consecutive chunks. Default is `100`. |
+
+### Full file
+
+<CodeGroup>
+
+```json embedder.json
+{
+  "embedder": {
+    "client_class": "OpenAIClient",
+    "batch_size": 500,
+    "model_kwargs": {
+      "model": "text-embedding-3-small",
+      "dimensions": 256,
+      "encoding_format": "float"
+    }
+  },
+  "embedder_ollama": {
+    "client_class": "OllamaClient",
+    "model_kwargs": {
+      "model": "nomic-embed-text"
+    }
+  },
+  "embedder_google": {
+    "client_class": "GoogleEmbedderClient",
+    "batch_size": 100,
+    "model_kwargs": {
+      "model": "gemini-embedding-001",
+      "task_type": "SEMANTIC_SIMILARITY"
+    }
+  },
+  "embedder_bedrock": {
+    "client_class": "BedrockClient",
+    "batch_size": 100,
+    "model_kwargs": {
+      "model": "amazon.titan-embed-text-v2:0",
+      "dimensions": 256
+    }
+  },
+  "retriever": {
+    "top_k": 20
+  },
+  "text_splitter": {
+    "split_by": "word",
+    "chunk_size": 350,
+    "chunk_overlap": 100
+  }
+}
+```
+
+</CodeGroup>
+
+### Selecting an embedder type
+
+The active embedder section is chosen by setting the `DEEPWIKI_EMBEDDER_TYPE` environment variable:
+
+| Value | Section used | API key required |
+|---|---|---|
+| `openai` (default) | `embedder` | `OPENAI_API_KEY` |
+| `google` | `embedder_google` | `GOOGLE_API_KEY` |
+| `ollama` | `embedder_ollama` | None (local) |
+| `bedrock` | `embedder_bedrock` | AWS credentials |
+
+```bash
+# Switch to Google AI embeddings
+export DEEPWIKI_EMBEDDER_TYPE=google
+```
+
+<Warning>
+Switching embedder types changes the vector space. Existing embeddings generated with a different embedder will not be compatible, so you must regenerate embeddings for any previously indexed repositories.
+</Warning>
+
+### Using OpenAI-compatible embeddings (e.g. Alibaba Qwen)
+
+DeepWiki ships an alternative template for embedding services that implement the OpenAI API. The template is stored at `api/config/embedder.openai_compatible.json.bak`. To use it:
+
+1. Replace the contents of `api/config/embedder.json` with the contents of `api/config/embedder.openai_compatible.json.bak`.
+2. Set the relevant environment variables in your `.env` file:
+
+```bash
+OPENAI_API_KEY=your_api_key
+OPENAI_BASE_URL=https://your-openai-compatible-endpoint/v1
+```
+
+The server substitutes `$OPENAI_API_KEY` and `$OPENAI_BASE_URL` placeholders in the file at startup, so no code changes are needed.
+
+---
+
+## repo.json
+
+`repo.json` controls which files and directories DeepWiki reads when cloning and indexing a repository. It also sets a maximum repository size. Adjusting this file lets you narrow or broaden what DeepWiki analyses without modifying application code.
+
+### Top-level sections
+
+| Section | Description |
+|---|---|
+| `file_filters` | Lists of excluded directories and file patterns. |
+| `repository` | Global repository constraints. |
+
+### file_filters fields
+
+| Field | Type | Description |
+|---|---|---|
+| `excluded_dirs` | string[] | Directory paths (relative to repo root) to skip entirely during traversal. |
+| `excluded_files` | string[] | File names or glob patterns to exclude. Supports wildcards like `*.min.js`. |
+
+### repository fields
+
+| Field | Type | Description |
+|---|---|---|
+| `max_size_mb` | integer | Maximum repository size in megabytes. Repositories exceeding this limit are rejected. Default is `50000`. |
+
+### Full file
+
+<CodeGroup>
+
+```json repo.json
+{
+  "file_filters": {
+    "excluded_dirs": [
+      "./.venv/",
+      "./venv/",
+      "./env/",
+      "./virtualenv/",
+      "./node_modules/",
+      "./bower_components/",
+      "./jspm_packages/",
+      "./.git/",
+      "./.svn/",
+      "./.hg/",
+      "./.bzr/"
+    ],
+    "excluded_files": [
+      "yarn.lock",
+      "pnpm-lock.yaml",
+      "npm-shrinkwrap.json",
+      "poetry.lock",
+      "Pipfile.lock",
+      "requirements.txt.lock",
+      "Cargo.lock",
+      "composer.lock",
+      ".lock",
+      ".DS_Store",
+      "Thumbs.db",
+      "desktop.ini",
+      "*.lnk",
+      ".env",
+      ".env.*",
+      "*.env",
+      "*.cfg",
+      "*.ini",
+      ".flaskenv",
+      ".gitignore",
+      ".gitattributes",
+      ".gitmodules",
+      ".github",
+      ".gitlab-ci.yml",
+      ".prettierrc",
+      ".eslintrc",
+      ".eslintignore",
+      ".stylelintrc",
+      ".editorconfig",
+      ".jshintrc",
+      ".pylintrc",
+      ".flake8",
+      "mypy.ini",
+      "pyproject.toml",
+      "tsconfig.json",
+      "webpack.config.js",
+      "babel.config.js",
+      "rollup.config.js",
+      "jest.config.js",
+      "karma.conf.js",
+      "vite.config.js",
+      "next.config.js",
+      "*.min.js",
+      "*.min.css",
+      "*.bundle.js",
+      "*.bundle.css",
+      "*.map",
+      "*.gz",
+      "*.zip",
+      "*.tar",
+      "*.tgz",
+      "*.rar",
+      "*.7z",
+      "*.iso",
+      "*.dmg",
+      "*.img",
+      "*.msix",
+      "*.appx",
+      "*.appxbundle",
+      "*.xap",
+      "*.ipa",
+      "*.deb",
+      "*.rpm",
+      "*.msi",
+      "*.exe",
+      "*.dll",
+      "*.so",
+      "*.dylib",
+      "*.o",
+      "*.obj",
+      "*.jar",
+      "*.war",
+      "*.ear",
+      "*.jsm",
+      "*.class",
+      "*.pyc",
+      "*.pyd",
+      "*.pyo",
+      "__pycache__",
+      "*.a",
+      "*.lib",
+      "*.lo",
+      "*.la",
+      "*.slo",
+      "*.dSYM",
+      "*.egg",
+      "*.egg-info",
+      "*.dist-info",
+      "*.eggs",
+      "node_modules",
+      "bower_components",
+      "jspm_packages",
+      "lib-cov",
+      "coverage",
+      "htmlcov",
+      ".nyc_output",
+      ".tox",
+      "dist",
+      "build",
+      "bld",
+      "out",
+      "bin",
+      "target",
+      "packages/*/dist",
+      "packages/*/build",
+      ".output"
+    ]
+  },
+  "repository": {
+    "max_size_mb": 50000
+  }
+}
+```
+
+</CodeGroup>
+
+### Customizing file filters
+
+To include files that are excluded by default (for example, `*.cfg` configuration files that are meaningful to your project), remove the relevant entry from `excluded_files`. To exclude additional paths, append them to the appropriate list.
+
+You can also pass per-request overrides via the `excluded_dirs`, `excluded_files`, `included_dirs`, and `included_files` fields on the `POST /chat/completions/stream` and `WebSocket /ws/chat` endpoints — these take effect without modifying the config file.
+
+---
+
+## Environment variables quick reference
+
+| Variable | Description | Default |
+|---|---|---|
+| `DEEPWIKI_CONFIG_DIR` | Directory containing all three config files. | `api/config/` |
+| `DEEPWIKI_EMBEDDER_TYPE` | Active embedder section: `openai`, `google`, `ollama`, or `bedrock`. | `openai` |
+| `OPENAI_BASE_URL` | Custom base URL for OpenAI-compatible embedding or model endpoints. | OpenAI default |
+| `OLLAMA_HOST` | Ollama server URL for local model and embedding requests. | `http://localhost:11434` |
+| `LOG_LEVEL` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. | `INFO` |
+| `LOG_FILE_PATH` | Path to write log output. Must be inside `api/logs/`. | `api/logs/application.log` |

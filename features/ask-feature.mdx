@@ -1,0 +1,62 @@
+---
+title: "Ask: chat with your repository using AI"
+description: "DeepWiki's Ask feature uses RAG to answer questions about your codebase with accurate, source-grounded responses and real-time streaming."
+---
+
+The Ask feature is a chat interface built directly into the wiki view. Instead of browsing pages, you can type a question about the repository and receive an AI-generated answer grounded in the actual source code. Responses are streamed in real time and the conversation retains context across multiple turns, so you can follow up with clarifying questions without repeating yourself.
+
+<Note>
+  Ask uses Retrieval Augmented Generation (RAG) to locate the most relevant code chunks before generating a response. This means even very large repositories work well — the model only sees the portions of the codebase that are relevant to your question, keeping responses accurate and within the model's context window.
+</Note>
+
+## How RAG powers Ask
+
+When you submit a question, DeepWiki runs three steps before generating a response:
+
+1. **Retrieve** — the question is embedded into a vector and matched against the repository's FAISS index, returning the most semantically similar code chunks
+2. **Augment** — the retrieved chunks are formatted and injected into the prompt alongside your conversation history
+3. **Generate** — the selected AI model streams a response that cites the retrieved code as its primary source of truth
+
+The RAG retriever groups documents by file path and passes them to the model with clear section headers, so the model always knows which file a snippet came from.
+
+## Using the Ask feature
+
+<Steps>
+  <Step title="Open the Ask panel">
+    Navigate to any generated wiki and click the **Ask** tab or button. The Ask panel slides in alongside the wiki navigation.
+  </Step>
+  <Step title="Select a provider and model (optional)">
+    The Ask panel inherits the provider and model selected for wiki generation, but you can change them independently. Click the model selector to switch to a different provider — Google Gemini, OpenAI, OpenRouter, Azure OpenAI, Ollama, and others are all supported.
+  </Step>
+  <Step title="Focus on a specific file (optional)">
+    If your question is about a single file, enter its path in the **File path** field. DeepWiki will use that file's content as additional context alongside the RAG results, giving the model a full view of the file rather than just retrieved snippets.
+  </Step>
+  <Step title="Type your question and submit">
+    Enter your question in the chat input and press Enter or click Send. The response streams in character by character as the model generates it.
+  </Step>
+  <Step title="Continue the conversation">
+    Ask follow-up questions without any special setup. DeepWiki stores the conversation history in memory and includes previous turns in each new request, so the model understands what has already been discussed.
+  </Step>
+</Steps>
+
+## Real-time streaming
+
+Responses are delivered as a stream rather than a single payload. You see each word appear as the model generates it. This is implemented via a WebSocket connection (`/ws/chat`) or an HTTP streaming endpoint (`POST /chat/completions/stream`), depending on how the client connects. Both paths produce identical output.
+
+## Conversation history
+
+The `Ask` component maintains a `conversationHistory` array in the React state. Each entry has a `role` (`user` or `assistant`) and `content`. On every new request, the full history is sent to the API inside the `messages` array of the `ChatCompletionRequest` model. The backend loads prior turns into its `Memory` component before calling the model, giving the model coherent multi-turn context.
+
+## Provider and model selection
+
+The same providers available for wiki generation work for Ask:
+
+| Provider | Notes |
+|---|---|
+| Google Gemini | Default provider; default model `gemini-2.5-flash` |
+| OpenAI | Requires `OPENAI_API_KEY`; default model `gpt-5-nano` |
+| OpenRouter | Access to Claude, Llama, Mistral, and more via one key |
+| Azure OpenAI | Requires `AZURE_OPENAI_API_KEY`, endpoint, and version |
+| Ollama | Local models; no API key required |
+
+You can also type a custom model identifier if your provider supports models not in the predefined list.

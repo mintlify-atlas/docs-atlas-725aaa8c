@@ -1,0 +1,196 @@
+---
+title: "Deploy DeepWiki with Docker Compose"
+description: "Run the full DeepWiki Open stack using Docker Compose or a standalone Docker container with persistent data storage via volume mounts."
+---
+
+Docker is the easiest way to deploy DeepWiki Open in a reproducible environment. The project ships a multi-stage `Dockerfile` that builds the Python backend and Next.js frontend into a single image, and a `docker-compose.yml` that wires up environment variables, port mappings, and persistent volume mounts for you.
+
+<Note>
+  Repository data, embeddings, and generated wiki cache are stored in `~/.adalflow` on your host machine. This directory is mounted into the container so your data survives container restarts and upgrades.
+</Note>
+
+## Deployment options
+
+<Tabs>
+  <Tab title="Docker Compose">
+    Docker Compose is the recommended method for most deployments. It reads your `.env` file automatically and configures logging, health checks, and memory limits.
+
+    **1. Clone the repository and create a `.env` file:**
+
+    ```bash
+    git clone https://github.com/AsyncFuncAI/deepwiki-open.git
+    cd deepwiki-open
+    ```
+
+    ```env
+    GOOGLE_API_KEY=your_google_api_key
+    OPENAI_API_KEY=your_openai_api_key
+
+    # Optional providers
+    OPENROUTER_API_KEY=your_openrouter_api_key
+    AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+    AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint
+    AZURE_OPENAI_VERSION=your_azure_openai_version
+    OLLAMA_HOST=your_ollama_host
+
+    # Optional: embedder type (openai | google | ollama)
+    DEEPWIKI_EMBEDDER_TYPE=google
+
+    # Optional: logging
+    LOG_LEVEL=INFO
+    LOG_FILE_PATH=api/logs/application.log
+    ```
+
+    **2. Start the stack:**
+
+    ```bash
+    docker-compose up
+    ```
+
+    To run in the background:
+
+    ```bash
+    docker-compose up -d
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) once the container is healthy.
+
+    ---
+
+    **Full `docker-compose.yml` reference:**
+
+    ```yaml
+    services:
+      deepwiki:
+        build:
+          context: .
+          dockerfile: Dockerfile
+        ports:
+          - "${PORT:-8001}:${PORT:-8001}"  # API port
+          - "3000:3000"  # Next.js port
+        env_file:
+          - .env
+        environment:
+          - PORT=${PORT:-8001}
+          - NODE_ENV=production
+          - SERVER_BASE_URL=http://localhost:${PORT:-8001}
+          - LOG_LEVEL=${LOG_LEVEL:-INFO}
+          - LOG_FILE_PATH=${LOG_FILE_PATH:-api/logs/application.log}
+        volumes:
+          - ~/.adalflow:/root/.adalflow      # Persist repository and embedding data
+          - ./api/logs:/app/api/logs          # Persist log files across container restarts
+        mem_limit: 6g
+        mem_reservation: 2g
+        healthcheck:
+          test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8001}/health"]
+          interval: 60s
+          timeout: 10s
+          retries: 3
+          start_period: 30s
+    ```
+  </Tab>
+
+  <Tab title="Docker Run">
+    Use a standalone `docker run` command when you want to launch the pre-built image from GitHub Container Registry without cloning the repository.
+
+    **Pull the image:**
+
+    ```bash
+    docker pull ghcr.io/asyncfuncai/deepwiki-open:latest
+    ```
+
+    **Run with environment variables:**
+
+    ```bash
+    docker run -p 8001:8001 -p 3000:3000 \
+      -e GOOGLE_API_KEY=your_google_api_key \
+      -e OPENAI_API_KEY=your_openai_api_key \
+      -e OPENROUTER_API_KEY=your_openrouter_api_key \
+      -e OLLAMA_HOST=your_ollama_host \
+      -e AZURE_OPENAI_API_KEY=your_azure_openai_api_key \
+      -e AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint \
+      -e AZURE_OPENAI_VERSION=your_azure_openai_version \
+      -v ~/.adalflow:/root/.adalflow \
+      ghcr.io/asyncfuncai/deepwiki-open:latest
+    ```
+
+    **Run with a mounted `.env` file instead:**
+
+    ```bash
+    docker run -p 8001:8001 -p 3000:3000 \
+      -v $(pwd)/.env:/app/.env \
+      -v ~/.adalflow:/root/.adalflow \
+      ghcr.io/asyncfuncai/deepwiki-open:latest
+    ```
+
+    **Enable Google AI embeddings via environment variable:**
+
+    ```bash
+    docker run -p 8001:8001 -p 3000:3000 \
+      -e GOOGLE_API_KEY=your_google_api_key \
+      -e DEEPWIKI_EMBEDDER_TYPE=google \
+      -v ~/.adalflow:/root/.adalflow \
+      ghcr.io/asyncfuncai/deepwiki-open:latest
+    ```
+  </Tab>
+
+  <Tab title="Build Locally">
+    Build the Docker image from source if you have made local modifications or need to include custom SSL certificates.
+
+    **Basic local build:**
+
+    ```bash
+    git clone https://github.com/AsyncFuncAI/deepwiki-open.git
+    cd deepwiki-open
+
+    docker build -t deepwiki-open .
+
+    docker run -p 8001:8001 -p 3000:3000 \
+      -e GOOGLE_API_KEY=your_google_api_key \
+      -e OPENAI_API_KEY=your_openai_api_key \
+      -e OPENROUTER_API_KEY=your_openrouter_api_key \
+      -e AZURE_OPENAI_API_KEY=your_azure_openai_api_key \
+      -e AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint \
+      -e AZURE_OPENAI_VERSION=your_azure_openai_version \
+      -e OLLAMA_HOST=your_ollama_host \
+      deepwiki-open
+    ```
+
+    **Build with self-signed certificates:**
+
+    ```bash
+    # Place .crt or .pem files in a directory (default: certs/)
+    mkdir certs
+    cp /path/to/your/cert.crt certs/
+
+    # Build using the default directory
+    docker build .
+
+    # Or specify a custom directory with the build argument
+    docker build --build-arg CUSTOM_CERT_DIR=my-custom-certs .
+    ```
+
+    The `CUSTOM_CERT_DIR` build argument tells the Dockerfile where to find certificate files to install into the system trust store via `update-ca-certificates`.
+  </Tab>
+</Tabs>
+
+## Volume mounts explained
+
+The two volume mounts used in both `docker-compose.yml` and the `docker run` examples serve distinct purposes:
+
+| Host path | Container path | Contents |
+|-----------|---------------|----------|
+| `~/.adalflow` | `/root/.adalflow` | Cloned repos (`repos/`), vector indexes (`databases/`), and wiki cache (`wikicache/`) |
+| `./api/logs` | `/app/api/logs` | Application log files |
+
+Without the `~/.adalflow` mount, every container restart triggers a full re-clone and re-index of every repository you have processed. The logs mount is optional but useful for auditing and debugging production deployments.
+
+## Health check
+
+The `docker-compose.yml` configures an HTTP health check against the backend API:
+
+```bash
+curl -f http://localhost:8001/health
+```
+
+The container is considered healthy after the first successful check. Docker Compose waits up to 30 seconds before starting health checks, then retries up to 3 times at 60-second intervals.

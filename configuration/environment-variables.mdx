@@ -1,0 +1,147 @@
+---
+title: "Environment variables reference"
+description: "Complete reference for all DeepWiki Open environment variables, including API keys, server settings, logging, and storage configuration."
+---
+
+DeepWiki Open is configured entirely through environment variables and JSON config files. Set these variables in a `.env` file at the project root or pass them directly to your Docker container. All variables are optional unless explicitly marked as required for a specific feature.
+
+## API keys
+
+Each model provider and embedding provider requires its own API key. You only need the keys for the providers you intend to use.
+
+<ParamField path="GOOGLE_API_KEY" type="string">
+  API key for Google Gemini models and Google AI embeddings. Required when using the `google` provider for text generation or when `DEEPWIKI_EMBEDDER_TYPE=google`. Obtain from [Google AI Studio](https://makersuite.google.com/app/apikey).
+</ParamField>
+
+<ParamField path="OPENAI_API_KEY" type="string">
+  API key for OpenAI models and embeddings. Required when using the `openai` provider for text generation or when `DEEPWIKI_EMBEDDER_TYPE=openai` (the default embedder). Also required when using OpenAI-compatible embedding endpoints via `OPENAI_BASE_URL`. Obtain from [OpenAI Platform](https://platform.openai.com/api-keys).
+</ParamField>
+
+<ParamField path="OPENROUTER_API_KEY" type="string">
+  API key for OpenRouter, which provides access to models from OpenAI, Anthropic, Google, Meta, Mistral, and more through a single API. Required only when using the `openrouter` provider. Obtain from [openrouter.ai](https://openrouter.ai/).
+</ParamField>
+
+<ParamField path="AZURE_OPENAI_API_KEY" type="string">
+  API key for your Azure OpenAI resource. Required when using the `azure` provider. Must be combined with `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_VERSION`. Obtain from the [Azure Portal](https://portal.azure.com/).
+</ParamField>
+
+<ParamField path="AZURE_OPENAI_ENDPOINT" type="string">
+  The endpoint URL for your Azure OpenAI resource (e.g. `https://my-resource.openai.azure.com/`). Required when using the `azure` provider.
+</ParamField>
+
+<ParamField path="AZURE_OPENAI_VERSION" type="string">
+  The Azure OpenAI API version string (e.g. `2024-02-01`). Required when using the `azure` provider.
+</ParamField>
+
+<ParamField path="AWS_ACCESS_KEY_ID" type="string">
+  AWS access key ID for authenticating with Amazon Bedrock. Required for Bedrock unless you are using instance-level or role-based IAM credentials.
+</ParamField>
+
+<ParamField path="AWS_SECRET_ACCESS_KEY" type="string">
+  AWS secret access key paired with `AWS_ACCESS_KEY_ID`. Required for Bedrock when not using instance or role-based credentials.
+</ParamField>
+
+<ParamField path="AWS_SESSION_TOKEN" type="string">
+  AWS session token for temporary STS credentials. Required only when using short-lived credentials obtained via `AssumeRole` or similar mechanisms.
+</ParamField>
+
+<ParamField path="AWS_REGION" type="string">
+  AWS region where Bedrock is accessed. Defaults to `us-east-1` when not set.
+</ParamField>
+
+<ParamField path="AWS_ROLE_ARN" type="string">
+  ARN of an IAM role to assume before calling Bedrock. When set, the Bedrock client will call STS `AssumeRole` automatically. Leave unset if your credentials already have the necessary permissions.
+</ParamField>
+
+<ParamField path="OLLAMA_HOST" type="string">
+  Base URL of the Ollama server. Defaults to `http://localhost:11434`. Set this only when your Ollama instance runs on a remote host or a non-default port.
+</ParamField>
+
+## Embedder configuration
+
+<ParamField path="DEEPWIKI_EMBEDDER_TYPE" type="string">
+  Selects the embedding provider used to create vector representations of repository code. Accepted values are `openai`, `google`, `ollama`, and `bedrock`. Defaults to `openai`.
+
+  Changing this value after a repository has already been indexed requires re-generating the embeddings, because different models produce incompatible vector spaces.
+</ParamField>
+
+<ParamField path="OPENAI_BASE_URL" type="string">
+  Overrides the base URL for OpenAI API calls. Use this to point the OpenAI client at a private or enterprise endpoint, or at any OpenAI-compatible third-party service (such as Alibaba Qwen). When set, the same key is also used by the embedder if `DEEPWIKI_EMBEDDER_TYPE=openai`.
+
+  Example: `https://custom-api-endpoint.com/v1`
+</ParamField>
+
+## Server configuration
+
+<ParamField path="PORT" type="string">
+  Port that the API server listens on. Defaults to `8001`. If you change this, update `SERVER_BASE_URL` to match so the frontend can reach the backend.
+</ParamField>
+
+<ParamField path="SERVER_BASE_URL" type="string">
+  Full base URL the frontend uses to reach the API. Defaults to `http://localhost:8001`. Update this whenever you change `PORT` or deploy the API to a remote host.
+</ParamField>
+
+## Authorization
+
+<ParamField path="DEEPWIKI_AUTH_MODE" type="string">
+  Enables authorization mode when set to `true` or `1`. In this mode the frontend displays an input field for a secret code before allowing wiki generation. Defaults to `false`.
+</ParamField>
+
+<ParamField path="DEEPWIKI_AUTH_CODE" type="string">
+  The secret code users must supply when `DEEPWIKI_AUTH_MODE` is enabled. Has no effect when auth mode is disabled. Only used if `DEEPWIKI_AUTH_MODE` is `true` or `1`.
+</ParamField>
+
+## Logging
+
+<ParamField path="LOG_LEVEL" type="string">
+  Controls the verbosity of application logs. Accepted values are `DEBUG`, `INFO`, `WARNING`, `ERROR`, and `CRITICAL`. Defaults to `INFO`.
+</ParamField>
+
+<ParamField path="LOG_FILE_PATH" type="string">
+  Path where log output is written. Defaults to `api/logs/application.log`. The application enforces that this path resides within the project's `api/logs` directory to prevent path traversal. When running via Docker Compose, `api/logs` is bind-mounted to `./api/logs` on the host so logs persist across container restarts.
+</ParamField>
+
+## Configuration directory
+
+<ParamField path="DEEPWIKI_CONFIG_DIR" type="string">
+  Path to a directory containing custom `generator.json`, `embedder.json`, and `repo.json` config files. When not set, DeepWiki looks for these files in the `api/config/` directory bundled with the source code. Set this when you want to supply your own model or embedder configuration without modifying the source.
+</ParamField>
+
+---
+
+## Minimal `.env` examples
+
+The following snippets show the smallest viable configuration for each common setup.
+
+```bash
+# Google Gemini + Google embeddings
+GOOGLE_API_KEY=your_google_api_key
+DEEPWIKI_EMBEDDER_TYPE=google
+```
+
+```bash
+# OpenAI models + OpenAI embeddings (default embedder)
+OPENAI_API_KEY=your_openai_api_key
+```
+
+```bash
+# Azure OpenAI
+AZURE_OPENAI_API_KEY=your_azure_key
+AZURE_OPENAI_ENDPOINT=https://my-resource.openai.azure.com/
+AZURE_OPENAI_VERSION=2024-02-01
+OPENAI_API_KEY=your_openai_api_key   # still needed for default embedder
+```
+
+```bash
+# Local Ollama (no API key required)
+DEEPWIKI_EMBEDDER_TYPE=ollama
+OLLAMA_HOST=http://localhost:11434
+```
+
+```bash
+# AWS Bedrock
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_REGION=us-east-1
+DEEPWIKI_EMBEDDER_TYPE=bedrock
+```

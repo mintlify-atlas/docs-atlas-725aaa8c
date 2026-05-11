@@ -1,0 +1,711 @@
+---
+title: "REST API and WebSocket endpoints reference"
+description: "Complete reference for all DeepWiki Open API endpoints including authentication, model config, wiki cache, chat completions, and wiki export."
+---
+
+DeepWiki Open's backend exposes a FastAPI server (default port **8001**) with REST endpoints and a WebSocket route. All REST endpoints return JSON unless a file download is requested. CORS is configured to allow all origins. The base URL is `http://localhost:8001` unless overridden by the `SERVER_BASE_URL` environment variable.
+
+---
+
+## Authentication
+
+### GET /auth/status
+
+Returns whether authorization mode is currently enabled on this DeepWiki instance. The frontend calls this on load to decide whether to show the authorization code input.
+
+**Response**
+
+<ResponseField name="auth_required" type="boolean">
+  `true` when `DEEPWIKI_AUTH_MODE` is set to `true` or `1`; otherwise `false`.
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://localhost:8001/auth/status
+```
+
+```json
+{ "auth_required": false }
+```
+
+---
+
+### POST /auth/validate
+
+Validates an authorization code against the server-configured `DEEPWIKI_AUTH_CODE`. Returns whether the submitted code is correct.
+
+**Request**
+
+<ParamField body="code" type="string" required>
+  The authorization code to validate.
+</ParamField>
+
+**Response**
+
+<ResponseField name="success" type="boolean">
+  `true` if the submitted code matches `DEEPWIKI_AUTH_CODE`; `false` otherwise.
+</ResponseField>
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8001/auth/validate \
+  -H "Content-Type: application/json" \
+  -d '{"code": "my-secret-code"}'
+```
+
+```json
+{ "success": true }
+```
+
+---
+
+## Language Configuration
+
+### GET /lang/config
+
+Returns the full language configuration used by the UI, including supported language codes and the default language.
+
+**Response**
+
+<ResponseField name="supported_languages" type="object">
+  A map of language code to display name (e.g. `"en": "English"`).
+</ResponseField>
+
+<ResponseField name="default" type="string">
+  The default language code (e.g. `"en"`).
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://localhost:8001/lang/config
+```
+
+```json
+{
+  "supported_languages": {
+    "en": "English",
+    "ja": "Japanese (日本語)",
+    "zh": "Mandarin Chinese (中文)",
+    "zh-tw": "Traditional Chinese (繁體中文)",
+    "es": "Spanish (Español)",
+    "kr": "Korean (한국어)",
+    "vi": "Vietnamese (Tiếng Việt)",
+    "pt-br": "Brazilian Portuguese (Português Brasileiro)",
+    "fr": "Français (French)",
+    "ru": "Русский (Russian)"
+  },
+  "default": "en"
+}
+```
+
+---
+
+## Model Configuration
+
+### GET /models/config
+
+Returns the list of available LLM providers and their models, read from `generator.json`. The frontend uses this to populate the provider and model selector dropdowns.
+
+**Response**
+
+<ResponseField name="providers" type="Provider[]">
+  Array of provider objects, each with an `id`, `name`, `supportsCustomModel` flag, and a list of model objects.
+</ResponseField>
+
+<ResponseField name="providers[].id" type="string">
+  Provider identifier (e.g. `"google"`, `"openai"`, `"openrouter"`, `"ollama"`, `"bedrock"`, `"azure"`, `"dashscope"`).
+</ResponseField>
+
+<ResponseField name="providers[].name" type="string">
+  Human-readable provider name (e.g. `"Google"`).
+</ResponseField>
+
+<ResponseField name="providers[].supportsCustomModel" type="boolean">
+  Whether this provider allows specifying a model ID that is not in the predefined list.
+</ResponseField>
+
+<ResponseField name="providers[].models" type="Model[]">
+  Array of model objects, each with an `id` and `name`.
+</ResponseField>
+
+<ResponseField name="providers[].models[].id" type="string">
+  Model identifier (e.g. `"gemini-2.5-flash"`).
+</ResponseField>
+
+<ResponseField name="providers[].models[].name" type="string">
+  Display name for the model (same as `id` by default).
+</ResponseField>
+
+<ResponseField name="defaultProvider" type="string">
+  ID of the default provider as set in `generator.json` (e.g. `"google"`).
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://localhost:8001/models/config
+```
+
+```json
+{
+  "providers": [
+    {
+      "id": "google",
+      "name": "Google",
+      "supportsCustomModel": true,
+      "models": [
+        { "id": "gemini-2.5-flash", "name": "gemini-2.5-flash" },
+        { "id": "gemini-2.5-flash-lite", "name": "gemini-2.5-flash-lite" },
+        { "id": "gemini-2.5-pro", "name": "gemini-2.5-pro" }
+      ]
+    }
+  ],
+  "defaultProvider": "google"
+}
+```
+
+---
+
+## Local Repository
+
+### GET /local_repo/structure
+
+Returns the file tree and README content for a local filesystem path. Used when a user provides a local directory instead of a remote repository URL.
+
+**Query Parameters**
+
+<ParamField query="path" type="string" required>
+  Absolute path to the local repository directory.
+</ParamField>
+
+**Response**
+
+<ResponseField name="file_tree" type="string">
+  Newline-separated list of relative file paths found under `path`. Hidden files, `__pycache__`, `node_modules`, and `.venv` directories are excluded.
+</ResponseField>
+
+<ResponseField name="readme" type="string">
+  Contents of the first `README.md` found in the repository (case-insensitive). Empty string if no README is found or it cannot be read.
+</ResponseField>
+
+**Example**
+
+```bash
+curl "http://localhost:8001/local_repo/structure?path=/home/user/myproject"
+```
+
+```json
+{
+  "file_tree": "src/main.py\nsrc/utils.py\nREADME.md",
+  "readme": "# My Project\n\nDescription here."
+}
+```
+
+---
+
+## Wiki Export
+
+### POST /export/wiki
+
+Exports generated wiki pages as a downloadable Markdown (`.md`) or JSON (`.json`) file. Returns a file download response with an auto-generated filename based on the repository name and current timestamp.
+
+**Request**
+
+<ParamField body="repo_url" type="string" required>
+  URL of the repository (used to derive the export filename).
+</ParamField>
+
+<ParamField body="pages" type="WikiPage[]" required>
+  Array of wiki page objects to include in the export.
+</ParamField>
+
+<ParamField body="pages[].id" type="string" required>
+  Unique identifier for the page.
+</ParamField>
+
+<ParamField body="pages[].title" type="string" required>
+  Page title.
+</ParamField>
+
+<ParamField body="pages[].content" type="string" required>
+  Page content in Markdown format.
+</ParamField>
+
+<ParamField body="pages[].filePaths" type="string[]" required>
+  Source file paths referenced by this page.
+</ParamField>
+
+<ParamField body="pages[].importance" type="string" required>
+  Importance level: `"high"`, `"medium"`, or `"low"`.
+</ParamField>
+
+<ParamField body="pages[].relatedPages" type="string[]" required>
+  IDs of related wiki pages.
+</ParamField>
+
+<ParamField body="format" type="string" required>
+  Export format: `"markdown"` or `"json"`.
+</ParamField>
+
+**Response**
+
+A file download response. The `Content-Disposition` header is set to `attachment; filename=<repo>_wiki_<timestamp>.<ext>`.
+
+- For `"markdown"`: `Content-Type: text/markdown`
+- For `"json"`: `Content-Type: application/json`
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8001/export/wiki \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repo_url": "https://github.com/owner/myrepo",
+    "format": "markdown",
+    "pages": [
+      {
+        "id": "overview",
+        "title": "Overview",
+        "content": "# Overview\n\nThis repo does X.",
+        "filePaths": ["src/main.py"],
+        "importance": "high",
+        "relatedPages": []
+      }
+    ]
+  }' \
+  --output myrepo_wiki.md
+```
+
+---
+
+## Streaming Chat Completions
+
+### POST /chat/completions/stream
+
+Streams a RAG-powered chat completion response for a given repository. The server retrieves relevant code context and generates a response using the configured model provider. The response is a Server-Sent Events (SSE) stream.
+
+**Request**
+
+<ParamField body="repo_url" type="string" required>
+  URL of the repository to query (GitHub, GitLab, Bitbucket, or local path).
+</ParamField>
+
+<ParamField body="messages" type="ChatMessage[]" required>
+  Conversation history. Each message has a `role` (`"user"` or `"assistant"`) and a `content` string.
+</ParamField>
+
+<ParamField body="provider" type="string" default="google">
+  Model provider: `"google"`, `"openai"`, `"openrouter"`, `"ollama"`, `"bedrock"`, `"azure"`, or `"dashscope"`.
+</ParamField>
+
+<ParamField body="model" type="string">
+  Model identifier for the specified provider. If omitted, the provider's `default_model` from `generator.json` is used.
+</ParamField>
+
+<ParamField body="filePath" type="string">
+  Optional path to a specific file in the repository to include in the prompt context.
+</ParamField>
+
+<ParamField body="token" type="string">
+  Personal access token for private repositories.
+</ParamField>
+
+<ParamField body="type" type="string" default="github">
+  Repository type: `"github"`, `"gitlab"`, or `"bitbucket"`.
+</ParamField>
+
+<ParamField body="language" type="string" default="en">
+  Language code for content generation (e.g. `"en"`, `"ja"`, `"zh"`, `"es"`, `"kr"`, `"vi"`).
+</ParamField>
+
+<ParamField body="excluded_dirs" type="string">
+  Newline-separated list of directory paths to exclude from processing.
+</ParamField>
+
+<ParamField body="excluded_files" type="string">
+  Newline-separated list of file patterns to exclude from processing.
+</ParamField>
+
+<ParamField body="included_dirs" type="string">
+  Newline-separated list of directories to include exclusively.
+</ParamField>
+
+<ParamField body="included_files" type="string">
+  Newline-separated list of file patterns to include exclusively.
+</ParamField>
+
+**Response**
+
+A streaming `text/event-stream` response. Each SSE event contains a chunk of the generated response text.
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8001/chat/completions/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repo_url": "https://github.com/owner/myrepo",
+    "messages": [{"role": "user", "content": "How does authentication work?"}],
+    "provider": "google",
+    "model": "gemini-2.5-flash"
+  }'
+```
+
+---
+
+## WebSocket Wiki Generation
+
+### WebSocket /ws/chat
+
+WebSocket endpoint for streaming wiki generation. The client connects, sends a `ChatCompletionRequest` JSON object, and receives streamed response chunks as text frames until generation is complete. This is the primary transport used for interactive wiki generation in the frontend.
+
+**Connection**
+
+```
+ws://localhost:8001/ws/chat
+```
+
+**Message sent by client (JSON)**
+
+The client sends a single JSON message after connecting. The structure mirrors `ChatCompletionRequest`:
+
+<ParamField body="repo_url" type="string" required>
+  URL of the repository to generate a wiki for.
+</ParamField>
+
+<ParamField body="messages" type="ChatMessage[]" required>
+  Conversation messages. Each has `role` (`"user"` or `"assistant"`) and `content`.
+</ParamField>
+
+<ParamField body="provider" type="string" default="google">
+  Model provider: `"google"`, `"openai"`, `"openrouter"`, `"ollama"`, `"bedrock"`, `"azure"`, or `"dashscope"`.
+</ParamField>
+
+<ParamField body="model" type="string">
+  Model name. Defaults to the provider's configured default if omitted.
+</ParamField>
+
+<ParamField body="token" type="string">
+  Personal access token for private repositories.
+</ParamField>
+
+<ParamField body="type" type="string" default="github">
+  Repository type: `"github"`, `"gitlab"`, or `"bitbucket"`.
+</ParamField>
+
+<ParamField body="language" type="string" default="en">
+  Language code for generated content.
+</ParamField>
+
+<ParamField body="excluded_dirs" type="string">
+  Newline-separated directories to exclude.
+</ParamField>
+
+<ParamField body="excluded_files" type="string">
+  Newline-separated file patterns to exclude.
+</ParamField>
+
+<ParamField body="included_dirs" type="string">
+  Newline-separated directories to include exclusively.
+</ParamField>
+
+<ParamField body="included_files" type="string">
+  Newline-separated file patterns to include exclusively.
+</ParamField>
+
+**Example (JavaScript)**
+
+```javascript
+const ws = new WebSocket("ws://localhost:8001/ws/chat");
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    repo_url: "https://github.com/owner/myrepo",
+    messages: [{ role: "user", content: "Generate a wiki for this repo." }],
+    provider: "google",
+    model: "gemini-2.5-flash",
+    language: "en"
+  }));
+};
+
+ws.onmessage = (event) => {
+  process.stdout.write(event.data);
+};
+```
+
+---
+
+## Wiki Cache
+
+Wiki cache files are stored on disk under `~/.adalflow/wikicache/`. The cache key is derived from `repo_type`, `owner`, `repo`, and `language`.
+
+### GET /api/wiki_cache
+
+Retrieves cached wiki data for a repository. Returns `null` (with HTTP 200) if no cache entry exists.
+
+**Query Parameters**
+
+<ParamField query="owner" type="string" required>
+  Repository owner (GitHub username or organization).
+</ParamField>
+
+<ParamField query="repo" type="string" required>
+  Repository name.
+</ParamField>
+
+<ParamField query="repo_type" type="string" required>
+  Repository host: `"github"`, `"gitlab"`, or `"bitbucket"`.
+</ParamField>
+
+<ParamField query="language" type="string" required>
+  Language code of the cached wiki (e.g. `"en"`).
+</ParamField>
+
+**Response**
+
+<ResponseField name="wiki_structure" type="WikiStructureModel">
+  The cached wiki structure, containing `id`, `title`, `description`, `pages`, `sections`, and `rootSections`.
+</ResponseField>
+
+<ResponseField name="generated_pages" type="object">
+  Map of page `id` to `WikiPage` objects.
+</ResponseField>
+
+<ResponseField name="repo" type="RepoInfo">
+  Repository metadata: `owner`, `repo`, `type`, and optionally `token`, `localPath`, `repoUrl`.
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  The model provider used to generate this cache entry.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model used to generate this cache entry.
+</ResponseField>
+
+**Example**
+
+```bash
+curl "http://localhost:8001/api/wiki_cache?owner=AsyncFuncAI&repo=deepwiki-open&repo_type=github&language=en"
+```
+
+---
+
+### POST /api/wiki_cache
+
+Stores generated wiki structure and pages to the server-side cache.
+
+**Request**
+
+<ParamField body="repo" type="RepoInfo" required>
+  Repository info: `owner` (string), `repo` (string), `type` (string), and optionally `token`, `localPath`, `repoUrl`.
+</ParamField>
+
+<ParamField body="language" type="string" required>
+  Language code for the cached wiki.
+</ParamField>
+
+<ParamField body="wiki_structure" type="WikiStructureModel" required>
+  Full wiki structure to cache.
+</ParamField>
+
+<ParamField body="generated_pages" type="object" required>
+  Map of page `id` to `WikiPage` for all generated pages.
+</ParamField>
+
+<ParamField body="provider" type="string" required>
+  Provider used for generation (e.g. `"google"`).
+</ParamField>
+
+<ParamField body="model" type="string" required>
+  Model used for generation (e.g. `"gemini-2.5-flash"`).
+</ParamField>
+
+**Response**
+
+<ResponseField name="message" type="string">
+  `"Wiki cache saved successfully"` on success.
+</ResponseField>
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8001/api/wiki_cache \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repo": { "owner": "AsyncFuncAI", "repo": "deepwiki-open", "type": "github" },
+    "language": "en",
+    "wiki_structure": { ... },
+    "generated_pages": { ... },
+    "provider": "google",
+    "model": "gemini-2.5-flash"
+  }'
+```
+
+---
+
+### DELETE /api/wiki_cache
+
+Deletes a specific wiki cache entry from disk. When `DEEPWIKI_AUTH_MODE` is enabled, a valid `authorization_code` is required.
+
+**Query Parameters**
+
+<ParamField query="owner" type="string" required>
+  Repository owner.
+</ParamField>
+
+<ParamField query="repo" type="string" required>
+  Repository name.
+</ParamField>
+
+<ParamField query="repo_type" type="string" required>
+  Repository host: `"github"`, `"gitlab"`, or `"bitbucket"`.
+</ParamField>
+
+<ParamField query="language" type="string" required>
+  Language code of the wiki to delete.
+</ParamField>
+
+<ParamField query="authorization_code" type="string">
+  Required when `DEEPWIKI_AUTH_MODE` is enabled.
+</ParamField>
+
+**Response**
+
+<ResponseField name="message" type="string">
+  Confirmation message including the repository name and language deleted.
+</ResponseField>
+
+Returns HTTP 401 if auth mode is enabled and the code is missing or incorrect. Returns HTTP 404 if no cache entry exists for the given parameters.
+
+**Example**
+
+```bash
+curl -X DELETE \
+  "http://localhost:8001/api/wiki_cache?owner=AsyncFuncAI&repo=deepwiki-open&repo_type=github&language=en"
+```
+
+---
+
+## Processed Projects
+
+### GET /api/processed_projects
+
+Lists all projects that have been processed and cached locally. Projects are identified by scanning the `~/.adalflow/wikicache/` directory for files matching the `deepwiki_cache_<repo_type>_<owner>_<repo>_<language>.json` naming pattern.
+
+**Response**
+
+<ResponseField name="" type="ProcessedProjectEntry[]">
+  Array of project entries sorted by most recently processed first.
+</ResponseField>
+
+<ResponseField name="[].id" type="string">
+  Cache filename (e.g. `deepwiki_cache_github_AsyncFuncAI_deepwiki-open_en.json`).
+</ResponseField>
+
+<ResponseField name="[].owner" type="string">
+  Repository owner.
+</ResponseField>
+
+<ResponseField name="[].repo" type="string">
+  Repository name.
+</ResponseField>
+
+<ResponseField name="[].name" type="string">
+  Combined `owner/repo` string.
+</ResponseField>
+
+<ResponseField name="[].repo_type" type="string">
+  Repository host (e.g. `"github"`).
+</ResponseField>
+
+<ResponseField name="[].submittedAt" type="integer">
+  File modification time as a Unix timestamp in milliseconds.
+</ResponseField>
+
+<ResponseField name="[].language" type="string">
+  Language code of the cached wiki.
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://localhost:8001/api/processed_projects
+```
+
+```json
+[
+  {
+    "id": "deepwiki_cache_github_AsyncFuncAI_deepwiki-open_en.json",
+    "owner": "AsyncFuncAI",
+    "repo": "deepwiki-open",
+    "name": "AsyncFuncAI/deepwiki-open",
+    "repo_type": "github",
+    "submittedAt": 1715000000000,
+    "language": "en"
+  }
+]
+```
+
+---
+
+## Health Check
+
+### GET /health
+
+Returns the current health status of the API server. Used by Docker and monitoring systems.
+
+**Response**
+
+<ResponseField name="status" type="string">
+  Always `"healthy"` when the server is running.
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the health check response.
+</ResponseField>
+
+<ResponseField name="service" type="string">
+  Always `"deepwiki-api"`.
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://localhost:8001/health
+```
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00.123456",
+  "service": "deepwiki-api"
+}
+```
+
+---
+
+### GET /
+
+Root endpoint. Returns a welcome message and a dynamically generated list of all available endpoints grouped by their first path segment.
+
+**Example**
+
+```bash
+curl http://localhost:8001/
+```
+
+```json
+{
+  "message": "Welcome to Streaming API",
+  "version": "1.0.0",
+  "endpoints": {
+    "Auth": ["GET /auth/status", "POST /auth/validate"],
+    "Models": ["GET /models/config"],
+    "Api": ["DELETE /api/wiki_cache", "GET /api/wiki_cache", "POST /api/wiki_cache"]
+  }
+}
+```

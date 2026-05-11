@@ -1,0 +1,86 @@
+---
+title: "DeepResearch: multi-turn AI investigation"
+description: "DeepResearch runs iterative AI research loops on your codebase, building toward a comprehensive conclusion through up to 5 research iterations."
+---
+
+DeepResearch extends the Ask feature with a structured, multi-turn investigation process. Instead of producing a single response, DeepResearch sends multiple rounds of retrieval and generation, each building on the findings of the previous one. The process ends when the AI produces a final conclusion — or after five iterations, whichever comes first. This makes DeepResearch well suited to open-ended architectural questions that benefit from sustained exploration rather than a quick lookup.
+
+## The three stages of a DeepResearch session
+
+Every DeepResearch session moves through three distinct stage types, rendered as separate panels in the UI:
+
+1. **Research Plan** (`type: 'plan'`) — the first iteration, where the AI outlines its approach, identifies key areas to investigate, and produces initial findings based on RAG retrieval
+2. **Research Updates** (`type: 'update'`) — intermediate iterations (up to three) where the AI revisits the codebase, incorporates what it has already found, and deepens the analysis
+3. **Final Conclusion** (`type: 'conclusion'`) — the last iteration, where the AI synthesizes all prior findings into a comprehensive, self-contained answer
+
+The frontend stores each stage in the `researchStages` array and lets you navigate between them using previous/next controls, so you can trace how the AI's understanding evolved.
+
+## How it works under the hood
+
+DeepResearch reuses the same `POST /chat/completions/stream` endpoint as Ask. The difference is a `[DEEP RESEARCH]` tag prepended to the user message. When the backend detects this tag, it selects a different system prompt for each iteration:
+
+- **Iteration 1** — `DEEP_RESEARCH_FIRST_ITERATION_PROMPT`: instructs the model to produce a research plan
+- **Iterations 2–4** — `DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT`: instructs the model to build on prior findings
+- **Iteration 5** — `DEEP_RESEARCH_FINAL_ITERATION_PROMPT`: instructs the model to write a conclusive summary
+
+The frontend counts prior assistant turns (`research_iteration = assistant messages + 1`) to determine which prompt the backend will use. Automatic continuation is triggered until `researchComplete` is set to `true` or five iterations have run.
+
+## Running a DeepResearch session
+
+<Steps>
+  <Step title="Open the Ask panel">
+    Navigate to any generated wiki and open the Ask panel.
+  </Step>
+  <Step title="Enable the Deep Research toggle">
+    Find the **Deep Research** switch in the Ask interface and toggle it on before typing your question. The toggle sets a `deepResearch` flag in the React component state.
+  </Step>
+  <Step title="Enter a research question">
+    Type a complex, open-ended question — for example, "How does the authentication system interact with the database layer?" or "What are all the places where rate limiting is applied?"
+  </Step>
+  <Step title="Submit and watch the plan appear">
+    DeepWiki sends the first request and streams the Research Plan. The panel title shows "Research Plan" and displays the AI's investigation strategy and initial findings.
+  </Step>
+  <Step title="Automatic continuation">
+    DeepResearch automatically triggers the next iteration after each response. You will see new Research Update panels appear as the AI digs deeper. No manual action is required between iterations.
+  </Step>
+  <Step title="Review the Final Conclusion">
+    After the last iteration, a Final Conclusion panel appears with the AI's synthesized answer. You can navigate back through the earlier stages to see how the conclusion was reached.
+  </Step>
+</Steps>
+
+## Ask vs. DeepResearch
+
+<Tabs>
+  <Tab title="Ask">
+    **Best for quick, targeted questions**
+
+    Use Ask when you want a direct answer to a specific question about the codebase.
+
+    Example scenarios:
+    - "What does the `prepare_retriever` function do?"
+    - "Which file handles WebSocket connections?"
+    - "What environment variables does this project require?"
+
+    **Characteristics:**
+    - Single retrieval pass → single response
+    - Fastest time to answer
+    - Conversation history maintained for follow-ups
+    - Well-suited to narrow, factual questions
+  </Tab>
+  <Tab title="DeepResearch">
+    **Best for complex architectural investigations**
+
+    Use DeepResearch when a question requires exploring multiple parts of the codebase and synthesizing findings.
+
+    Example scenarios:
+    - "How does the RAG pipeline retrieve and rank documents?"
+    - "Trace the full lifecycle of a wiki generation request from the frontend to the backend."
+    - "What are all the extension points in the model provider system?"
+
+    **Characteristics:**
+    - Up to 5 retrieval-and-generation rounds
+    - Structured plan → updates → conclusion output
+    - Longer time to complete
+    - Well-suited to open-ended, multi-faceted questions
+  </Tab>
+</Tabs>

@@ -1,0 +1,150 @@
+---
+title: "Export your wiki as Markdown or JSON"
+description: "Download any DeepWiki-generated wiki as a structured Markdown file or a machine-readable JSON file with metadata and page content."
+---
+
+Once DeepWiki has generated a wiki, you can download the entire content as a self-contained file. Two formats are available: Markdown for human-readable documentation and JSON for programmatic consumption. Both exports include every wiki page and are produced by the `POST /export/wiki` endpoint in the DeepWiki API.
+
+## Triggering an export from the UI
+
+Open a generated wiki and locate the export controls in the top-right area of the wiki view. Select either **Markdown** or **JSON**, then click the download button. The browser will receive a file attachment with a name in the format `{repo}_wiki_{timestamp}.md` or `{repo}_wiki_{timestamp}.json`, where `{repo}` is the last segment of the repository URL and `{timestamp}` is a `YYYYMMDD_HHMMSS` string.
+
+## Export formats
+
+<Tabs>
+  <Tab title="Markdown">
+    The Markdown export is a single `.md` file suitable for reading in any text editor, publishing to a docs site, or committing to the repository itself.
+
+    **Structure:**
+
+    - A top-level heading with the repository URL
+    - A "Generated on" timestamp
+    - A **Table of Contents** with anchor links to every page
+    - Each page rendered as a level-2 heading with:
+      - A **Related Pages** sub-section listing linked topics (when present)
+      - The full page content
+      - A horizontal rule separator between pages
+
+    Filename pattern: `{repo}_wiki_{YYYYMMDD_HHMMSS}.md`
+  </Tab>
+  <Tab title="JSON">
+    The JSON export is a machine-readable `.json` file suitable for ingestion into other tools, custom documentation pipelines, or further processing with scripts.
+
+    **Structure:**
+
+    - A `metadata` object with the repository URL, generation timestamp (ISO 8601), and total page count
+    - A `pages` array where each element is a serialized `WikiPage` object
+
+    Filename pattern: `{repo}_wiki_{YYYYMMDD_HHMMSS}.json`
+  </Tab>
+</Tabs>
+
+## Format examples
+
+<CodeGroup>
+
+```markdown example-wiki.md
+# Wiki Documentation for https://github.com/example/repo
+
+Generated on: 2024-01-15 10:30:00
+
+## Table of Contents
+
+- [Overview](#overview)
+- [API Reference](#api-reference)
+
+<a id='overview'></a>
+
+## Overview
+
+### Related Pages
+
+Related topics: [API Reference](#api-reference)
+
+This repository provides...
+
+---
+
+<a id='api-reference'></a>
+
+## API Reference
+
+Details about the API...
+
+---
+```
+
+```json example-wiki.json
+{
+  "metadata": {
+    "repository": "https://github.com/example/repo",
+    "generated_at": "2024-01-15T10:30:00.000000",
+    "page_count": 2
+  },
+  "pages": [
+    {
+      "id": "overview",
+      "title": "Overview",
+      "content": "This repository provides...",
+      "filePaths": ["README.md", "src/main.py"],
+      "importance": "high",
+      "relatedPages": ["api-reference"]
+    },
+    {
+      "id": "api-reference",
+      "title": "API Reference",
+      "content": "Details about the API...",
+      "filePaths": ["api/api.py"],
+      "importance": "high",
+      "relatedPages": ["overview"]
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+## API endpoint
+
+You can call the export endpoint directly without the UI. Send a `POST` request to `/export/wiki` with the repository URL, the list of wiki pages, and the desired format.
+
+```bash
+curl -X POST http://localhost:8001/export/wiki \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repo_url": "https://github.com/example/repo",
+    "format": "json",
+    "pages": [
+      {
+        "id": "overview",
+        "title": "Overview",
+        "content": "Page content here...",
+        "filePaths": ["README.md"],
+        "importance": "high",
+        "relatedPages": []
+      }
+    ]
+  }' \
+  --output repo_wiki.json
+```
+
+The response is a file download (`Content-Disposition: attachment`) with the appropriate `Content-Type` header (`text/markdown` or `application/json`).
+
+### Request body schema
+
+| Field | Type | Description |
+|---|---|---|
+| `repo_url` | string | Repository URL, used to derive the filename |
+| `format` | `"markdown"` \| `"json"` | Output format |
+| `pages` | array of `WikiPage` | Pages to include in the export |
+
+### `WikiPage` object
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique page identifier |
+| `title` | string | Page title |
+| `content` | string | Full page content (Markdown) |
+| `filePaths` | string[] | Source files the page was generated from |
+| `importance` | `"high"` \| `"medium"` \| `"low"` | Relative importance of the page |
+| `relatedPages` | string[] | IDs of related pages |

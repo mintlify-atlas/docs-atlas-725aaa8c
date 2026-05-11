@@ -1,0 +1,73 @@
+---
+title: "Authorization mode for wiki generation"
+description: "Restrict who can generate wikis in DeepWiki Open by enabling authorization mode with a secret code — useful for shared or public self-hosted deployments."
+---
+
+By default, anyone who can reach your DeepWiki instance can trigger wiki generation for any repository. Authorization mode adds a lightweight gate in front of this feature: the frontend requires a valid secret code before it submits a generation request. This is most useful when hosting DeepWiki on a shared or public server where you want to limit generation to known users while still keeping the wiki browsing experience open.
+
+## How it works
+
+When `DEEPWIKI_AUTH_MODE` is enabled, the DeepWiki frontend calls the `/auth/status` endpoint on startup. If that endpoint returns `{ "auth_required": true }`, the UI renders an authorization code input field on the generation form. The entered code is validated against the `/auth/validate` endpoint before generation proceeds. Cache deletion is also protected by the same check.
+
+## Enabling authorization mode
+
+Set both variables in your `.env` file or container environment:
+
+```bash
+DEEPWIKI_AUTH_MODE=true
+DEEPWIKI_AUTH_CODE=your_secret_code
+```
+
+`DEEPWIKI_AUTH_MODE` accepts `true` or `1` as truthy values. Any other value — including an empty string or `false` — leaves authorization disabled.
+
+**Example with Docker Compose**
+
+```bash
+# .env
+DEEPWIKI_AUTH_MODE=true
+DEEPWIKI_AUTH_CODE=my-secret-2024
+```
+
+Then run:
+
+```bash
+docker-compose up
+```
+
+**Example with `docker run`**
+
+```bash
+docker run -p 8001:8001 -p 3000:3000 \
+  -e DEEPWIKI_AUTH_MODE=true \
+  -e DEEPWIKI_AUTH_CODE=my-secret-2024 \
+  -e GOOGLE_API_KEY=your_google_api_key \
+  -v ~/.adalflow:/root/.adalflow \
+  ghcr.io/asyncfuncai/deepwiki-open:latest
+```
+
+## UI behavior
+
+When authorization mode is active:
+
+1. The generation form displays an **Authorization Code** input field.
+2. The user enters the code and submits the form.
+3. DeepWiki validates the code against the backend. If it matches `DEEPWIKI_AUTH_CODE`, generation proceeds normally.
+4. If the code is wrong or missing, the frontend rejects the request before any generation work begins.
+
+When `DEEPWIKI_AUTH_MODE` is `false` or unset, the input field is not rendered and no code is required.
+
+## Disabling authorization mode
+
+Remove `DEEPWIKI_AUTH_MODE` from your environment, or set it explicitly to `false`:
+
+```bash
+DEEPWIKI_AUTH_MODE=false
+```
+
+`DEEPWIKI_AUTH_CODE` has no effect when auth mode is off, so you can leave it in place without consequence.
+
+## Security limitation
+
+<Note>
+  Authorization mode restricts frontend-initiated generation and protects cache deletion, but it does **not** fully prevent wiki generation if someone calls the API endpoints directly (for example, via `curl` or another HTTP client). The backend does not enforce the authorization code on the generation endpoints themselves. If you require hard enforcement, place DeepWiki behind a reverse proxy with proper authentication (such as HTTP basic auth, OAuth, or an API gateway) in addition to enabling this mode.
+</Note>

@@ -1,0 +1,226 @@
+---
+title: "Run DeepWiki locally with Ollama"
+description: "Use Ollama to run DeepWiki Open entirely offline with local open-source LLMs. No API key or internet connection required after models are downloaded."
+---
+
+Ollama lets you run open-source language models directly on your own hardware. When DeepWiki is configured to use Ollama, the entire pipeline — embedding, retrieval, and wiki generation — runs locally. No API keys, no usage costs, and no data leaves your machine.
+
+<Tip>
+  Set `DEEPWIKI_EMBEDDER_TYPE=ollama` alongside the Ollama generator to achieve a fully offline setup. This means both code indexing and documentation generation happen on your local hardware with no cloud calls at all.
+</Tip>
+
+## Why use Ollama with DeepWiki?
+
+- **Free**: No per-token charges from any cloud provider
+- **Private**: Source code never leaves your machine
+- **Offline**: Works without an internet connection after models are downloaded
+- **No API key required**: Skip the sign-up and key management overhead
+
+## Hardware requirements
+
+For acceptable performance with the default models:
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| CPU | 4 cores | 8+ cores |
+| RAM | 8 GB | 16 GB+ |
+| Storage | 10 GB free | 20 GB+ free |
+| GPU | Optional | Strongly recommended |
+
+A dedicated GPU significantly speeds up both embedding and generation. Without one, expect generation to be noticeably slower than cloud APIs.
+
+## Available Ollama models
+
+The following generator models are pre-configured in `api/config/generator.json`:
+
+| Model | Context window | Use case |
+|-------|---------------|----------|
+| `qwen3:1.7b` (default) | 32,000 tokens | Good balance of speed and quality |
+| `llama3:8b` | 8,000 tokens | Higher quality, slower |
+| `qwen3:8b` | 32,000 tokens | Best quality, requires more RAM |
+
+You can use any model available in the [Ollama library](https://ollama.com/library) by pulling it and updating `api/config/generator.json`.
+
+For embeddings, DeepWiki uses `nomic-embed-text` when `DEEPWIKI_EMBEDDER_TYPE=ollama`.
+
+## Setup steps
+
+<Steps>
+  <Step title="Install Ollama">
+    <Tabs>
+      <Tab title="Linux">
+        ```bash
+        curl -fsSL https://ollama.com/install.sh | sh
+        ```
+      </Tab>
+      <Tab title="macOS">
+        Download the installer from [ollama.com/download](https://ollama.com/download), open the file, and drag Ollama to your Applications folder. Then launch it from Applications.
+      </Tab>
+      <Tab title="Windows">
+        Download the installer from [ollama.com/download](https://ollama.com/download), run it, and follow the on-screen instructions. Ollama will run in the background; check the system tray to confirm it is running.
+      </Tab>
+    </Tabs>
+
+    Confirm Ollama is running:
+
+    ```bash
+    ollama list
+    ```
+  </Step>
+
+  <Step title="Pull the required models">
+    Pull the embedding model and at least one generator model:
+
+    ```bash
+    # Embedding model (required for DEEPWIKI_EMBEDDER_TYPE=ollama)
+    ollama pull nomic-embed-text
+
+    # Generator model — pick one
+    ollama pull qwen3:1.7b    # default, recommended starting point
+    ollama pull llama3:8b     # higher quality, more RAM required
+    ollama pull qwen3:8b      # best quality, most resource-intensive
+    ```
+
+    The first pull downloads several gigabytes of model weights; subsequent runs use the local cache.
+  </Step>
+
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/AsyncFuncAI/deepwiki-open.git
+    cd deepwiki-open
+    ```
+  </Step>
+
+  <Step title="Configure the Ollama embedder">
+    Replace the default embedder configuration with the Ollama-specific one:
+
+    ```bash
+    cp api/config/embedder.ollama.json.bak api/config/embedder.json
+    ```
+
+    When prompted to confirm the overwrite, enter `y`.
+  </Step>
+
+  <Step title="Create a .env file">
+    No API keys are needed for a fully local setup:
+
+    ```env
+    # No cloud API keys required
+    PORT=8001
+
+    # Only set this if Ollama is running on a remote host
+    # OLLAMA_HOST=http://192.168.1.50:11434
+
+    # Use Ollama for embeddings (fully offline)
+    DEEPWIKI_EMBEDDER_TYPE=ollama
+    ```
+
+    If Ollama is running on the same machine, `OLLAMA_HOST` defaults to `http://localhost:11434` and does not need to be set.
+  </Step>
+
+  <Step title="Start the backend">
+    ```bash
+    python -m pip install poetry==2.0.1 && poetry install -C api
+    python -m api.main
+    ```
+  </Step>
+
+  <Step title="Start the frontend">
+    In a second terminal:
+
+    ```bash
+    npm install
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Generate a wiki with Ollama">
+    1. Open [http://localhost:3000](http://localhost:3000)
+    2. Enter a GitHub, GitLab, or Bitbucket repository URL
+    3. Enable the **Use Local Ollama Model** option in the model selector
+    4. Click **Generate Wiki**
+  </Step>
+</Steps>
+
+## Docker + Ollama setup
+
+If you prefer to run DeepWiki inside Docker while Ollama runs on the host, use the dedicated Ollama Dockerfile:
+
+<Steps>
+  <Step title="Configure the embedder">
+    ```bash
+    cp api/config/embedder.ollama.json.bak api/config/embedder.json
+    ```
+  </Step>
+
+  <Step title="Build the Ollama-specific image">
+    ```bash
+    docker build -f Dockerfile-ollama-local -t deepwiki:ollama-local .
+    ```
+  </Step>
+
+  <Step title="Run the container">
+    ```bash
+    # Standard use
+    docker run -p 3000:3000 -p 8001:8001 --name deepwiki \
+      -v ~/.adalflow:/root/.adalflow \
+      -e OLLAMA_HOST=your_ollama_host \
+      deepwiki:ollama-local
+    ```
+
+    To also analyse a local repository by mounting it into the container:
+
+    ```bash
+    docker run -p 3000:3000 -p 8001:8001 --name deepwiki \
+      -v ~/.adalflow:/root/.adalflow \
+      -e OLLAMA_HOST=your_ollama_host \
+      -v /path/to/your/repo:/app/local-repos/repo-name \
+      deepwiki:ollama-local
+    ```
+
+    When using a mounted local repository, enter `/app/local-repos/repo-name` as the repository path in the DeepWiki UI.
+  </Step>
+</Steps>
+
+<Note>
+  On Apple Silicon Macs, the Dockerfile automatically selects ARM64 binaries for better native performance.
+</Note>
+
+## Using a custom generator model
+
+To switch to any model available in `ollama list`, edit `api/config/generator.json` and change the `"model"` value under the `ollama` provider:
+
+```json
+"ollama": {
+  "default_model": "qwen3:1.7b",
+  "supportsCustomModel": true,
+  "models": {
+    "qwen3:1.7b": {
+      "options": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "num_ctx": 32000
+      }
+    }
+  }
+}
+```
+
+You can also enter a custom model identifier directly in the DeepWiki frontend without editing any config files, because `supportsCustomModel` is set to `true`.
+
+## Troubleshooting
+
+**"Cannot connect to Ollama server"**
+- Run `ollama list` to verify Ollama is running
+- Check that nothing else is using port `11434`
+- Try restarting Ollama
+
+**Slow generation**
+- Local models are inherently slower than cloud APIs
+- Start with `qwen3:1.7b` (smallest, fastest) and only move to larger models if quality is insufficient
+- A GPU with at least 8 GB VRAM significantly improves throughput
+
+**Out of memory errors**
+- Use a smaller model such as `phi3:mini`
+- Close other memory-intensive applications before running Ollama
+- Reduce the `num_ctx` value in `generator.json` to lower memory usage

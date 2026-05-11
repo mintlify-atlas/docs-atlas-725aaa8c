@@ -1,0 +1,118 @@
+---
+title: "Access private repositories with DeepWiki"
+description: "DeepWiki supports GitHub, GitLab, and Bitbucket private repositories. Add a personal access token in the UI to authenticate clone operations per request."
+---
+
+DeepWiki can clone and index private repositories on GitHub, GitLab, and Bitbucket. Authentication is handled by providing a personal access token (or Bitbucket app password) through the UI before generating a wiki. The token is sent with the request and used only for that operation — it is not stored permanently on the server.
+
+<Warning>
+  Never share your personal access token in a public environment or with untrusted DeepWiki deployments. Treat your token with the same care as a password. If you suspect a token has been exposed, revoke it immediately in your platform's security settings and generate a new one.
+</Warning>
+
+## How tokens work in DeepWiki
+
+When you enter a token, the frontend passes it in the `token` field of the `ChatCompletionRequest` payload sent to the API. The backend uses this token to authenticate the `git clone` operation for that specific request. The `TokenInput` component notes explicitly: "Your token is stored locally and never sent to our servers" — it exists only in your browser session and travels to your own self-hosted DeepWiki instance via your own network.
+
+The `ChatCompletionRequest` model exposes the token as an optional field:
+
+```python
+token: Optional[str] = Field(
+    None,
+    description="Personal access token for private repositories"
+)
+```
+
+## Adding a token in the UI
+
+<Steps>
+  <Step title="Open the token section">
+    On the DeepWiki home page, click **+ Add Access Tokens for Private Repositories** below the repository URL field. The token panel expands to show platform tabs and a token input field.
+  </Step>
+  <Step title="Select your platform">
+    Click the **GitHub**, **GitLab**, or **Bitbucket** tab to select the platform that hosts your private repository.
+  </Step>
+  <Step title="Paste your token">
+    Enter your personal access token (or Bitbucket app password) in the input field. The value is masked for security.
+  </Step>
+  <Step title="Generate the wiki">
+    Click **Generate Wiki** as normal. DeepWiki will use your token to authenticate the clone operation.
+  </Step>
+</Steps>
+
+## Creating a token on each platform
+
+<Tabs>
+  <Tab title="GitHub">
+    GitHub offers two types of personal access tokens: classic and fine-grained.
+
+    **Classic token (simpler)**
+
+    <Steps>
+      <Step title="Open token settings">
+        Go to **GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)**.
+      </Step>
+      <Step title="Generate a new token">
+        Click **Generate new token (classic)**. Enter a note, choose an expiration, and select the `repo` scope to grant read access to private repositories.
+      </Step>
+      <Step title="Copy the token">
+        Copy the token immediately — GitHub will not show it again.
+      </Step>
+    </Steps>
+
+    **Fine-grained token (recommended)**
+
+    <Steps>
+      <Step title="Open token settings">
+        Go to **GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
+      </Step>
+      <Step title="Generate a new token">
+        Click **Generate new token**. Set an expiration, select **Only select repositories**, choose the target repository, and grant **Contents: Read-only** under Repository permissions.
+      </Step>
+      <Step title="Copy the token">
+        Copy the token immediately.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="GitLab">
+    <Steps>
+      <Step title="Open access token settings">
+        Go to **GitLab → Edit profile → Access tokens** (for personal tokens) or **Group/Project → Settings → Access tokens** for scoped tokens.
+      </Step>
+      <Step title="Create a new token">
+        Click **Add new token**. Enter a name and expiry date. Select the `read_repository` scope so DeepWiki can clone the repository.
+      </Step>
+      <Step title="Copy the token">
+        Click **Create personal access token** and copy the value shown. GitLab will not display it again.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Bitbucket">
+    Bitbucket uses **app passwords** rather than personal access tokens for repository authentication.
+
+    <Steps>
+      <Step title="Open app password settings">
+        Go to **Bitbucket → Personal settings → App passwords**.
+      </Step>
+      <Step title="Create a new app password">
+        Click **Create app password**. Give it a label and enable the **Repositories: Read** permission.
+      </Step>
+      <Step title="Copy the app password">
+        Copy the generated app password. Bitbucket will not show it again.
+      </Step>
+      <Step title="Enter credentials in DeepWiki">
+        In DeepWiki, select the **Bitbucket** tab and enter your app password. Use your Bitbucket username as part of the repository URL if needed.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Minimum required permissions
+
+| Platform | Token type | Required scope / permission |
+|---|---|---|
+| GitHub | Classic | `repo` |
+| GitHub | Fine-grained | Contents: Read-only |
+| GitLab | Personal access token | `read_repository` |
+| Bitbucket | App password | Repositories: Read |
+
+Broader scopes will also work, but granting the minimum required permissions limits risk if a token is ever accidentally exposed.

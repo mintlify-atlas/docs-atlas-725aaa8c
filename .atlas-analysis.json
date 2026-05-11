@@ -1,0 +1,87 @@
+{
+  "projectType": "saas",
+  "projectName": "DeepWiki Open",
+  "projectDescription": "An open-source, self-hostable AI-powered wiki generator that automatically creates interactive documentation, diagrams, and Q&A interfaces for any GitHub, GitLab, or Bitbucket repository.",
+  "theme": "palm",
+  "primaryColor": "#8f3ec4",
+  "lightColor": "#edd9e4",
+  "darkColor": "#a3477d",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "docker-deployment"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/model-providers",
+              "configuration/embeddings",
+              "configuration/authorization"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/wiki-generation",
+              "features/ask-feature",
+              "features/deep-research",
+              "features/private-repositories",
+              "features/export"
+            ]
+          },
+          {
+            "group": "Self-Hosting",
+            "pages": [
+              "self-hosting/manual-setup",
+              "self-hosting/docker",
+              "self-hosting/ollama",
+              "self-hosting/advanced"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/api-endpoints",
+              "reference/config-files",
+              "reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Instant AI-powered wiki generation for GitHub, GitLab, and Bitbucket repositories",
+    "Automatic Mermaid diagram generation to visualize code architecture and data flow",
+    "Ask feature: RAG-powered chat interface for querying repository content",
+    "DeepResearch: multi-turn AI research process for in-depth topic investigation",
+    "Multiple LLM provider support: Google Gemini, OpenAI, OpenRouter, Azure OpenAI, AWS Bedrock, Ollama, DashScope",
+    "Flexible embedding providers: OpenAI, Google AI, Ollama, Bedrock",
+    "Private repository support via personal access tokens",
+    "Wiki export in Markdown and JSON formats",
+    "Authorization mode for controlled access to wiki generation",
+    "Docker-based deployment with persistent storage"
+  ],
+  "publicApiSurface": [
+    "GET /models/config — List available LLM providers and models",
+    "GET /auth/status — Check if authorization mode is enabled",
+    "POST /auth/validate — Validate authorization code",
+    "POST /chat/completions/stream — Streaming chat completions (Ask / DeepResearch)",
+    "WebSocket /ws/chat — WebSocket-based wiki generation stream",
+    "POST /export/wiki — Export wiki pages as Markdown or JSON",
+    "GET /local_repo/structure — Get file tree for a local repository",
+    "GET /lang/config — Get language/localization configuration",
+    "GET /wiki/cache — Read cached wiki data",
+    "POST /wiki/cache — Save wiki cache",
+    "DELETE /wiki/cache — Delete wiki cache"
+  ]
+}

@@ -1,0 +1,199 @@
+---
+title: "Advanced DeepWiki deployment and configuration"
+description: "Configure custom ports, log file paths, config directories, enterprise API channels, and self-signed certificates for production DeepWiki deployments."
+---
+
+Once the basic deployment is running, several environment variables let you tune DeepWiki's behaviour for production environments: custom ports, structured logging, alternative config directories, enterprise API endpoints, and self-signed certificate support. This page covers each option with concrete examples.
+
+## Custom port configuration
+
+By default the FastAPI backend listens on port `8001` and the Next.js frontend on port `3000`. Change `PORT` and `SERVER_BASE_URL` together whenever you need a different backend port — the frontend reads `SERVER_BASE_URL` to know where to send API requests.
+
+<CodeGroup>
+  ```env Custom backend port (.env)
+  PORT=9000
+  SERVER_BASE_URL=http://localhost:9000
+  ```
+
+  ```bash Docker run with custom port
+  docker run -p 9000:9000 -p 3000:3000 \
+    -e PORT=9000 \
+    -e SERVER_BASE_URL=http://localhost:9000 \
+    -e GOOGLE_API_KEY=your_google_api_key \
+    -v ~/.adalflow:/root/.adalflow \
+    ghcr.io/asyncfuncai/deepwiki-open:latest
+  ```
+
+  ```yaml docker-compose.yml override
+  services:
+    deepwiki:
+      environment:
+        - PORT=9000
+        - SERVER_BASE_URL=http://localhost:9000
+      ports:
+        - "9000:9000"
+        - "3000:3000"
+  ```
+</CodeGroup>
+
+## Custom config directory
+
+By default, DeepWiki reads `generator.json`, `embedder.json`, and `repo.json` from `api/config/`. Set `DEEPWIKI_CONFIG_DIR` to point to a different directory — useful when you want to maintain a shared config volume or override settings without modifying the image.
+
+```env
+DEEPWIKI_CONFIG_DIR=/etc/deepwiki/config
+```
+
+The three expected files in that directory are:
+
+| File | Purpose |
+|------|---------|
+| `generator.json` | LLM provider definitions, models, and generation parameters |
+| `embedder.json` | Embedding model selection and RAG retriever settings |
+| `repo.json` | File filters, repository size limits, and processing rules |
+
+## Logging configuration
+
+DeepWiki uses Python's standard `logging` module. Two environment variables control logging output:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `INFO` | Verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
+| `LOG_FILE_PATH` | `api/logs/application.log` | File path for log output |
+
+<CodeGroup>
+  ```env .env file
+  LOG_LEVEL=DEBUG
+  LOG_FILE_PATH=api/logs/debug.log
+  ```
+
+  ```bash Manual setup
+  export LOG_LEVEL=DEBUG
+  export LOG_FILE_PATH=api/logs/debug.log
+  python -m api.main
+  ```
+
+  ```bash Docker Compose
+  LOG_LEVEL=DEBUG LOG_FILE_PATH=api/logs/debug.log docker-compose up
+  ```
+</CodeGroup>
+
+When running with Docker Compose, the `./api/logs` directory on your host is bind-mounted to `/app/api/logs` inside the container, so log files persist across restarts and are accessible from the host.
+
+<Warning>
+  `LOG_FILE_PATH` must resolve to a path within the project's `api/logs` directory. The application enforces this restriction to prevent path traversal attacks and unauthorised writes to arbitrary filesystem locations. In production, also secure the `api/logs` directory with appropriate filesystem permissions so only the DeepWiki process can write to it.
+</Warning>
+
+## adalflow data directory
+
+<Note>
+  All cloned repositories, vector embeddings, and generated wiki cache are stored under `~/.adalflow` on the host. When running with Docker, mount this directory as a volume to persist data across container restarts:
+
+  ```bash
+  -v ~/.adalflow:/root/.adalflow
+  ```
+
+  The directory layout is:
+
+  | Subdirectory | Contents |
+  |-------------|----------|
+  | `~/.adalflow/repos/` | Cloned repository source code |
+  | `~/.adalflow/databases/` | FAISS vector indexes for each repo |
+  | `~/.adalflow/wikicache/` | Cached generated wiki pages |
+</Note>
+
+## Enterprise private channel configuration
+
+The `OPENAI_BASE_URL` variable overrides the base URL used by the OpenAI client. This is designed for enterprise deployments that route requests through a private API gateway, a self-hosted LLM proxy, or an OpenAI-compatible third-party service.
+
+<CodeGroup>
+  ```env Private API gateway
+  OPENAI_API_KEY=your_enterprise_key
+  OPENAI_BASE_URL=https://api.internal.example.com/v1
+  ```
+
+  ```env OpenAI-compatible service (e.g. Alibaba Qwen)
+  OPENAI_API_KEY=your_api_key
+  OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+  ```
+
+  ```env Self-hosted vLLM or LiteLLM proxy
+  OPENAI_API_KEY=not-used
+  OPENAI_BASE_URL=http://vllm-host:8000/v1
+  ```
+</CodeGroup>
+
+To use an OpenAI-compatible embedding service alongside a private endpoint, replace `api/config/embedder.json` with the contents of `api/config/embedder.openai_compatible.json.bak`, then set the two variables above. DeepWiki substitutes environment variable placeholders in the config file automatically at startup.
+
+## Self-signed certificate setup
+
+In enterprise environments where internal services use self-signed or private CA certificates, the Docker build accepts a `CUSTOM_CERT_DIR` build argument. Certificates placed in that directory are installed into the system trust store during the image build via `update-ca-certificates`.
+
+<Steps>
+  <Step title="Create a certificate directory">
+    ```bash
+    mkdir certs
+    ```
+  </Step>
+
+  <Step title="Copy your certificate files">
+    Place `.crt` or `.pem` files into the directory. All files in the directory are processed.
+
+    ```bash
+    cp /path/to/internal-ca.crt certs/
+    ```
+  </Step>
+
+  <Step title="Build the image with the certificate directory">
+    <CodeGroup>
+      ```bash Default directory (certs/)
+      docker build .
+      ```
+
+      ```bash Custom directory name
+      docker build --build-arg CUSTOM_CERT_DIR=my-custom-certs .
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Authorization mode
+
+Authorization mode restricts wiki generation to users who present a valid code. Enable it when you want to share your DeepWiki instance with a limited group without exposing unrestricted access.
+
+```env
+DEEPWIKI_AUTH_MODE=true
+DEEPWIKI_AUTH_CODE=your_secret_code
+```
+
+When `DEEPWIKI_AUTH_MODE` is `true` or `1`, the frontend displays an authorization code input field. Generation and cache deletion are blocked without the correct code. Note that this protects the frontend flow but does not fully restrict direct backend API calls.
+
+## Multi-language support
+
+DeepWiki can generate wiki content in multiple languages. The supported language codes are defined in `api/config/lang.json`. You select the output language via the language selector in the UI or by passing a `language` field in the API request. No additional environment variables are needed.
+
+## Full environment variable reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_API_KEY` | — | Google Gemini API key |
+| `OPENAI_API_KEY` | — | OpenAI API key |
+| `OPENAI_BASE_URL` | — | Custom base URL for OpenAI client (enterprise channels) |
+| `OPENROUTER_API_KEY` | — | OpenRouter API key |
+| `AZURE_OPENAI_API_KEY` | — | Azure OpenAI API key |
+| `AZURE_OPENAI_ENDPOINT` | — | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_VERSION` | — | Azure OpenAI API version |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
+| `DEEPWIKI_EMBEDDER_TYPE` | `openai` | Embedder: `openai`, `google`, `ollama`, or `bedrock` |
+| `DEEPWIKI_CONFIG_DIR` | `api/config` | Path to JSON config files |
+| `PORT` | `8001` | Backend API port |
+| `SERVER_BASE_URL` | `http://localhost:8001` | Backend API base URL (read by frontend) |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `LOG_FILE_PATH` | `api/logs/application.log` | Log file destination |
+| `DEEPWIKI_AUTH_MODE` | `false` | Enable authorization mode (`true` or `1`) |
+| `DEEPWIKI_AUTH_CODE` | — | Secret code required when auth mode is enabled |
+| `AWS_ACCESS_KEY_ID` | — | AWS credentials for Bedrock |
+| `AWS_SECRET_ACCESS_KEY` | — | AWS credentials for Bedrock |
+| `AWS_SESSION_TOKEN` | — | AWS STS session token for Bedrock |
+| `AWS_REGION` | `us-east-1` | AWS region for Bedrock |
+| `AWS_ROLE_ARN` | — | AWS role ARN to assume for Bedrock |
